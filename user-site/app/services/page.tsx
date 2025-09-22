@@ -1,13 +1,13 @@
 import { Navigation } from "@/components/navigation"
 import { Footer } from "@/components/footer"
-import { ProductCatalog } from "@/components/product-catalog"
+import { ServicesPage } from "@/components/services-page"
 
-export default function ProductsPage() {
+export default function Services() {
   return (
     <div className="min-h-screen">
       <Navigation />
       <main>
-        <ProductCatalog />
+        <ServicesPage />
       </main>
       <Footer />
     </div>

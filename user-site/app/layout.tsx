@@ -4,12 +4,13 @@ import { GeistSans } from "geist/font/sans"
 import { GeistMono } from "geist/font/mono"
 import { Analytics } from "@vercel/analytics/next"
 import { Suspense } from "react"
+import { CartProvider } from "@/contexts/cart-context"
 import "./globals.css"
 
 export const metadata: Metadata = {
-  title: "Julie's Craft - Handmade Chairs & Artisan Goods",
+  title: "Julie Crafts - Authentic Ugandan Handmade Crafts",
   description:
-    "Discover unique handmade craft chairs, pottery, jewelry, textiles, and woodwork crafted by skilled artisans at Julie's Craft",
+    "Discover beautiful handmade crafts from Kampala, Uganda. Pottery, jewelry, textiles, wood carvings and more from local artisans.",
   generator: "v0.app",
 }
 
@@ -21,7 +22,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable}`}>
-        <Suspense fallback={null}>{children}</Suspense>
+        <CartProvider>
+          <Suspense fallback={null}>{children}</Suspense>
+        </CartProvider>
         <Analytics />
       </body>
     </html>

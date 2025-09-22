@@ -4,75 +4,75 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Updated color tokens to match crafts business design brief */
-  --background: oklch(1 0 0); /* #ffffff */
-  --foreground: oklch(0.35 0 0); /* #4b5563 */
-  --card: oklch(0.99 0.02 85); /* #fffbeb */
-  --card-foreground: oklch(0.35 0 0); /* #4b5563 */
-  --popover: oklch(1 0 0); /* #ffffff */
-  --popover-foreground: oklch(0.35 0 0); /* #4b5563 */
-  --primary: oklch(0.75 0.18 100); /* Attractive yellowish green */
-  --primary-foreground: oklch(1 0 0); /* #ffffff */
-  --secondary: oklch(0.8 0.15 90); /* Complementary yellowish green */
-  --secondary-foreground: oklch(1 0 0); /* #ffffff */
-  --muted: oklch(0.98 0.02 100); /* Very light yellowish green tint */
-  --muted-foreground: oklch(0.35 0 0); /* #4b5563 */
-  --accent: oklch(0.8 0.15 90); /* Yellowish green accent */
-  --accent-foreground: oklch(1 0 0); /* #ffffff */
-  --destructive: oklch(0.55 0.22 25); /* #dc2626 */
-  --destructive-foreground: oklch(1 0 0); /* #ffffff */
-  --border: oklch(0.32 0 0); /* #475569 */
-  --input: oklch(1 0 0); /* #ffffff */
-  --ring: oklch(0.75 0.18 100 / 0.5); /* Yellowish green with opacity */
-  --chart-1: oklch(0.75 0.18 100); /* Yellowish green */
-  --chart-2: oklch(0.8 0.15 90); /* Complementary yellowish green */
-  --chart-3: oklch(0.85 0.12 80); /* Lighter yellowish green */
-  --chart-4: oklch(0.7 0.2 110); /* Golden green */
-  --chart-5: oklch(0.65 0.22 120); /* Olive green */
-  --radius: 0.5rem;
-  --sidebar: oklch(1 0 0); /* #ffffff */
-  --sidebar-foreground: oklch(0.35 0 0); /* #4b5563 */
-  --sidebar-primary: oklch(0.75 0.18 100); /* Yellowish green */
-  --sidebar-primary-foreground: oklch(1 0 0); /* #ffffff */
-  --sidebar-accent: oklch(0.8 0.15 90); /* Complementary yellowish green */
-  --sidebar-accent-foreground: oklch(1 0 0); /* #ffffff */
-  --sidebar-border: oklch(0.32 0 0); /* #475569 */
-  --sidebar-ring: oklch(0.75 0.18 100 / 0.5); /* Yellowish green with opacity */
+  /* Updated color palette for Julie Crafts warm, earthy aesthetic */
+  --background: #f0fdf4; /* Light green for background */
+  --foreground: #374151; /* Dark gray for text */
+  --card: #ffffff; /* White for cards */
+  --card-foreground: #374151; /* Dark gray for card text */
+  --popover: #ffffff; /* White for popovers */
+  --popover-foreground: #374151; /* Dark gray for popover text */
+  --primary: #15803d; /* Green for primary actions */
+  --primary-foreground: #ffffff; /* White for text on primary buttons */
+  --secondary: #84cc16; /* Bright green for accents */
+  --secondary-foreground: #374151; /* Dark gray for secondary text */
+  --muted: #f0fdf4; /* Light background for muted elements */
+  --muted-foreground: #6b7280; /* Medium gray for muted text */
+  --accent: #84cc16; /* Bright green for accents */
+  --accent-foreground: #374151; /* Dark gray for accent text */
+  --destructive: #d97706; /* Amber for warnings or errors */
+  --destructive-foreground: #ffffff; /* White text on destructive elements */
+  --border: #e5e7eb; /* Light gray for borders */
+  --input: #ffffff; /* White for input fields */
+  --ring: #84cc16; /* Bright green for focus rings */
+  --chart-1: #d97706; /* Amber for chart element 1 */
+  --chart-2: #15803d; /* Green for chart element 2 */
+  --chart-3: #374151; /* Dark gray for chart element 3 */
+  --chart-4: #f0fdf4; /* Light green for chart element 4 */
+  --chart-5: #84cc16; /* Bright green for chart element 5 */
+  --radius: 0.5rem; /* Rounded corners for cards and buttons */
+  --sidebar: #ffffff; /* White for sidebar background */
+  --sidebar-foreground: #374151; /* Dark gray for sidebar text */
+  --sidebar-primary: #15803d; /* Green for primary sidebar elements */
+  --sidebar-primary-foreground: #ffffff; /* White text on primary sidebar */
+  --sidebar-accent: #84cc16; /* Bright green for sidebar accents */
+  --sidebar-accent-foreground: #374151; /* Dark gray for sidebar accent text */
+  --sidebar-border: #e5e7eb; /* Light gray for sidebar borders */
+  --sidebar-ring: #84cc16; /* Bright green for sidebar focus rings */
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.145 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.145 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.985 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.396 0.141 25.723);
-  --destructive-foreground: oklch(0.637 0.237 25.331);
-  --border: oklch(0.269 0 0);
-  --input: oklch(0.269 0 0);
-  --ring: oklch(0.439 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(0.269 0 0);
-  --sidebar-ring: oklch(0.439 0 0);
+  --background: #1f2937;
+  --foreground: #f9fafb;
+  --card: #374151;
+  --card-foreground: #f9fafb;
+  --popover: #374151;
+  --popover-foreground: #f9fafb;
+  --primary: #84cc16;
+  --primary-foreground: #1f2937;
+  --secondary: #15803d;
+  --secondary-foreground: #f9fafb;
+  --muted: #4b5563;
+  --muted-foreground: #d1d5db;
+  --accent: #84cc16;
+  --accent-foreground: #1f2937;
+  --destructive: #d97706;
+  --destructive-foreground: #ffffff;
+  --border: #4b5563;
+  --input: #374151;
+  --ring: #84cc16;
+  --chart-1: #d97706;
+  --chart-2: #15803d;
+  --chart-3: #f9fafb;
+  --chart-4: #4b5563;
+  --chart-5: #84cc16;
+  --sidebar: #374151;
+  --sidebar-foreground: #f9fafb;
+  --sidebar-primary: #84cc16;
+  --sidebar-primary-foreground: #1f2937;
+  --sidebar-accent: #15803d;
+  --sidebar-accent-foreground: #f9fafb;
+  --sidebar-border: #4b5563;
+  --sidebar-ring: #84cc16;
 }
 
 @theme inline {

@@ -25,138 +25,36 @@ import {
   AlertTriangle,
   TrendingUp,
   Star,
-  Image as ImageIcon
+  Image as ImageIcon,
+  RefreshCw
 } from "lucide-react"
-
-// JulieCraft Products Data
-const julieCraftProducts = [
-  {
-    id: "1",
-    name: "Handcrafted Ceramic Bowl Set",
-    description: "Set of 4 handcrafted ceramic bowls in earth tones",
-    category: "Pottery",
-    price: 89.99,
-    stock: 12,
-    status: "active",
-    featured: true,
-    sales: 45,
-    image: "/products/pdt1.jpeg"
-  },
-  {
-    id: "2", 
-    name: "Silver Wire Bracelet with Natural Stones",
-    description: "Elegant handwoven silver wire bracelet with natural stones",
-    category: "Jewelry",
-    price: 67.99,
-    stock: 20,
-    status: "active",
-    featured: false,
-    sales: 32,
-    image: "/products/pdt2.jpeg"
-  },
-  {
-    id: "3",
-    name: "Blue Glazed Vase",
-    description: "Large decorative vase with beautiful blue glaze finish",
-    category: "Pottery", 
-    price: 124.99,
-    stock: 3,
-    status: "active",
-    featured: false,
-    sales: 18,
-    image: "/products/pdt3.jpeg"
-  },
-  {
-    id: "4",
-    name: "Wool Throw Blanket - Traditional Pattern",
-    description: "Soft wool throw blanket in traditional patterns",
-    category: "Textiles",
-    price: 156.99,
-    stock: 2,
-    status: "active",
-    featured: true,
-    sales: 25,
-    image: "/products/pdt4.jpeg"
-  },
-  {
-    id: "5",
-    name: "Copper Earrings with Patina Finish",
-    description: "Handforged copper earrings with unique patina finish",
-    category: "Jewelry",
-    price: 29.99,
-    stock: 25,
-    status: "active",
-    featured: true,
-    sales: 28,
-    image: "/products/pdt5.jpeg"
-  },
-  {
-    id: "6",
-    name: "Colorful Beaded Necklace",
-    description: "Colorful beaded necklace with semi-precious stones",
-    category: "Jewelry",
-    price: 45.99,
-    stock: 18,
-    status: "active",
-    featured: false,
-    sales: 22,
-    image: "/products/pdt6.jpeg"
-  },
-  {
-    id: "7",
-    name: "Terracotta Planter",
-    description: "Rustic terracotta planter perfect for herbs and small plants",
-    category: "Pottery",
-    price: 34.99,
-    stock: 15,
-    status: "active",
-    featured: false,
-    sales: 35,
-    image: "/products/pdt7.jpeg"
-  },
-  {
-    id: "8",
-    name: "Hand-carved Oak Cutting Board",
-    description: "Premium oak cutting board with natural edge",
-    category: "Woodwork",
-    price: 68.99,
-    stock: 16,
-    status: "active",
-    featured: true,
-    sales: 19,
-    image: "/products/pdt8.jpeg"
-  },
-  {
-    id: "9",
-    name: "Hand-dyed Silk Scarf",
-    description: "Hand-dyed silk scarf with abstract patterns",
-    category: "Textiles",
-    price: 78.99,
-    stock: 14,
-    status: "active",
-    featured: false,
-    sales: 16,
-    image: "/products/pdt9.jpeg"
-  },
-]
-
-const categories = ["All", "Pottery", "Jewelry", "Textiles", "Woodwork"]
+import { useProducts, useProductStats, useCategories } from "@/hooks/use-products"
+import { ProductFilters } from "@/lib/types/product"
 
 export default function ProductsPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("All")
-  const [products] = useState(julieCraftProducts)
+  const [currentPage, setCurrentPage] = useState(0)
+  const [pageSize] = useState(20)
 
-  const filteredProducts = products.filter(product => {
-    const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         product.category.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesCategory = selectedCategory === "All" || product.category === selectedCategory
-    return matchesSearch && matchesCategory
-  })
+  // Build filters for API
+  const filters: ProductFilters = {
+    search: searchTerm || undefined,
+    category_id: selectedCategory !== "All" ? selectedCategory : undefined,
+    limit: pageSize,
+    offset: currentPage * pageSize,
+    sort_by: 'created_at',
+    sort_order: 'desc'
+  }
 
-  const lowStockCount = products.filter(p => p.stock <= 5).length
-  const totalValue = products.reduce((sum, p) => sum + (p.price * p.stock), 0)
-  const avgPrice = products.reduce((sum, p) => sum + p.price, 0) / products.length
+  // Fetch data from API
+  const { products, loading, error, total, refetch } = useProducts(filters)
+  const { stats, loading: statsLoading, refetch: refetchStats } = useProductStats()
+  const { categories, loading: categoriesLoading } = useCategories()
+
+  const handleRefresh = async () => {
+    await Promise.all([refetch(), refetchStats()])
+  }
 
   return (
     <div className="h-full">
@@ -168,10 +66,22 @@ export default function ProductsPage() {
               <h1 className="text-2xl font-bold text-gray-900 tracking-tight">JulieCraft Products</h1>
               <p className="text-gray-600 mt-1 text-base">Manage your craft inventory and product catalog</p>
             </div>
-            <Button className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm">
-              <Plus className="w-4 h-4 mr-2" />
-              Add Product
-            </Button>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleRefresh}
+                disabled={loading || statsLoading}
+                className="bg-white hover:bg-gray-50 border-gray-300"
+              >
+                <RefreshCw className={`w-4 h-4 mr-2 ${(loading || statsLoading) ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
+              <Button className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm">
+                <Plus className="w-4 h-4 mr-2" />
+                Add Product
+              </Button>
+            </div>
           </div>
 
           {/* Stats Cards */}
@@ -186,7 +96,9 @@ export default function ProductsPage() {
                 </div>
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-gray-600">Total Products</p>
-                  <p className="text-xl font-bold text-gray-900">{products.length}</p>
+                  <p className="text-xl font-bold text-gray-900">
+                    {statsLoading ? '...' : stats?.total_products || 0}
+                  </p>
                   <p className="text-xs text-gray-500">Active inventory items</p>
                 </div>
               </CardContent>
@@ -202,7 +114,9 @@ export default function ProductsPage() {
                 </div>
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-gray-600">Inventory Value</p>
-                  <p className="text-xl font-bold text-gray-900">{totalValue.toLocaleString()} UGX</p>
+                  <p className="text-xl font-bold text-gray-900">
+                    {statsLoading ? '...' : `${(stats?.total_inventory_value || 0).toLocaleString()} UGX`}
+                  </p>
                   <p className="text-xs text-gray-500">Total stock value</p>
                 </div>
               </CardContent>
@@ -218,7 +132,9 @@ export default function ProductsPage() {
                 </div>
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-gray-600">Avg. Price</p>
-                  <p className="text-xl font-bold text-gray-900">{avgPrice.toLocaleString()} UGX</p>
+                  <p className="text-xl font-bold text-gray-900">
+                    {statsLoading ? '...' : `${(stats?.average_price || 0).toLocaleString()} UGX`}
+                  </p>
                   <p className="text-xs text-gray-500">Average product price</p>
                 </div>
               </CardContent>
@@ -234,7 +150,9 @@ export default function ProductsPage() {
                 </div>
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-gray-600">Low Stock</p>
-                  <p className="text-xl font-bold text-gray-900">{lowStockCount}</p>
+                  <p className="text-xl font-bold text-gray-900">
+                    {statsLoading ? '...' : stats?.low_stock_products || 0}
+                  </p>
                   <p className="text-xs text-gray-500">Items need restocking</p>
                 </div>
               </CardContent>
@@ -261,18 +179,29 @@ export default function ProductsPage() {
                 
                 {/* Category Filters */}
                 <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant={selectedCategory === "All" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setSelectedCategory("All")}
+                    className={selectedCategory === "All" 
+                      ? "bg-blue-500 hover:bg-blue-600 text-white shadow-sm" 
+                      : "bg-white hover:bg-blue-50 hover:text-blue-700 border-gray-300 text-gray-700"
+                    }
+                  >
+                    All
+                  </Button>
                   {categories.map((category) => (
                     <Button
-                      key={category}
-                      variant={selectedCategory === category ? "default" : "outline"}
+                      key={category.id}
+                      variant={selectedCategory === category.id ? "default" : "outline"}
                       size="sm"
-                      onClick={() => setSelectedCategory(category)}
-                      className={selectedCategory === category 
+                      onClick={() => setSelectedCategory(category.id)}
+                      className={selectedCategory === category.id 
                         ? "bg-blue-500 hover:bg-blue-600 text-white shadow-sm" 
                         : "bg-white hover:bg-blue-50 hover:text-blue-700 border-gray-300 text-gray-700"
                       }
                     >
-                      {category}
+                      {category.name}
                     </Button>
                   ))}
                 </div>
@@ -295,86 +224,113 @@ export default function ProductsPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredProducts.map((product) => (
-                      <TableRow key={product.id} className="hover:bg-gray-50/50 transition-colors">
-                        <TableCell className="py-4">
-                          <div className="w-14 h-14 bg-gray-100 rounded-lg overflow-hidden shadow-sm">
-                            <img 
-                              src={product.image} 
-                              alt={product.name}
-                              className="w-full h-full object-cover"
-                            />
+                    {loading ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center py-8">
+                          <div className="flex items-center justify-center space-x-2">
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                            <span>Loading products...</span>
                           </div>
-                        </TableCell>
-                        <TableCell className="py-4">
-                          <div className="space-y-1">
-                            <div className="font-semibold text-gray-900">{product.name}</div>
-                            {product.featured && (
-                              <Badge className="text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 border-blue-200">
-                                <Star className="w-3 h-3 mr-1 fill-current" />
-                                Featured
-                              </Badge>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="py-4">
-                          <Badge variant="outline" className="bg-white text-gray-700 border-gray-300">
-                            {product.category}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="py-4 font-semibold text-gray-900">{product.price.toLocaleString()} UGX</TableCell>
-                        <TableCell className="py-4">
-                          <div className="flex items-center space-x-2">
-                            <span className={`font-semibold ${product.stock <= 5 ? 'text-red-600' : 'text-gray-900'}`}>
-                              {product.stock}
-                            </span>
-                            {product.stock <= 5 && (
-                              <AlertTriangle className="w-4 h-4 text-red-500" />
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="py-4 text-gray-700">{product.sales} sold</TableCell>
-                        <TableCell className="py-4">
-                          <Badge 
-                            className={product.status === 'active' 
-                              ? 'bg-emerald-100 text-emerald-700 border-emerald-200' 
-                              : 'bg-gray-100 text-gray-700 border-gray-200'
-                            }
-                          >
-                            {product.status.charAt(0).toUpperCase() + product.status.slice(1)}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="py-4">
-                        <div className="flex items-center space-x-1">
-                          <Button variant="ghost" size="sm" className="text-gray-600 hover:bg-blue-50 hover:text-blue-700">
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                          <Button variant="ghost" size="sm" className="text-gray-600 hover:bg-blue-50 hover:text-blue-700">
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                          <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700 hover:bg-red-50">
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
                         </TableCell>
                       </TableRow>
-                    ))}
+                    ) : error ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center py-8">
+                          <div className="text-red-600">
+                            <AlertTriangle className="w-8 h-8 mx-auto mb-2" />
+                            <p>Error loading products: {error}</p>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ) : products.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center py-8">
+                          <Package className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                          <h3 className="text-lg font-semibold text-gray-900 mb-2">No products found</h3>
+                          <p className="text-gray-600">Try adjusting your search or filter criteria</p>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      products.map((product) => (
+                        <TableRow key={product.id} className="hover:bg-gray-50/50 transition-colors">
+                          <TableCell className="py-4">
+                            <div className="w-14 h-14 bg-gray-100 rounded-lg overflow-hidden shadow-sm">
+                              {product.images && product.images.length > 0 ? (
+                                <img 
+                                  src={product.images[0]} 
+                                  alt={product.name}
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center">
+                                  <ImageIcon className="w-6 h-6 text-gray-400" />
+                                </div>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="py-4">
+                            <div className="space-y-1">
+                              <div className="font-semibold text-gray-900">{product.name}</div>
+                              {product.featured && (
+                                <Badge className="text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 border-blue-200">
+                                  <Star className="w-3 h-3 mr-1 fill-current" />
+                                  Featured
+                                </Badge>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="py-4">
+                            <Badge variant="outline" className="bg-white text-gray-700 border-gray-300">
+                              {product.category?.name || 'Uncategorized'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="py-4 font-semibold text-gray-900">{product.price.toLocaleString()} UGX</TableCell>
+                          <TableCell className="py-4">
+                            <div className="flex items-center space-x-2">
+                              <span className={`font-semibold ${product.stock_quantity <= 5 ? 'text-red-600' : 'text-gray-900'}`}>
+                                {product.stock_quantity}
+                              </span>
+                              {product.stock_quantity <= 5 && (
+                                <AlertTriangle className="w-4 h-4 text-red-500" />
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="py-4 text-gray-700">-</TableCell>
+                          <TableCell className="py-4">
+                            <Badge 
+                              className={product.status === 'active' 
+                                ? 'bg-emerald-100 text-emerald-700 border-emerald-200' 
+                                : 'bg-gray-100 text-gray-700 border-gray-200'
+                              }
+                            >
+                              {product.status.charAt(0).toUpperCase() + product.status.slice(1)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="py-4">
+                          <div className="flex items-center space-x-1">
+                            <Button variant="ghost" size="sm" className="text-gray-600 hover:bg-blue-50 hover:text-blue-700">
+                              <Eye className="w-4 h-4" />
+                            </Button>
+                            <Button variant="ghost" size="sm" className="text-gray-600 hover:bg-blue-50 hover:text-blue-700">
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                            <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700 hover:bg-red-50">
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
                   </TableBody>
                 </Table>
               </div>
 
-              {filteredProducts.length === 0 && (
-                <div className="text-center py-12 px-4">
-                  <Package className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">No products found</h3>
-                  <p className="text-gray-600">Try adjusting your search or filter criteria</p>
-                </div>
-              )}
             </CardContent>
           </Card>
 
           {/* Bulk Actions */}
-          {filteredProducts.length > 0 && (
+          {products.length > 0 && (
             <Card className="bg-white border-0 shadow-lg">
               <CardHeader className="border-b border-gray-100 pb-4">
                 <CardTitle className="text-lg font-semibold text-gray-900">Bulk Actions</CardTitle>

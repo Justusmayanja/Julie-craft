@@ -1,0 +1,63 @@
+import { z } from 'zod'
+
+export const createProductSchema = z.object({
+  name: z.string().min(1, 'Product name is required').max(255, 'Product name must be less than 255 characters'),
+  description: z.string().min(1, 'Description is required').max(2000, 'Description must be less than 2000 characters'),
+  category_id: z.string().uuid('Invalid category ID'),
+  price: z.number().positive('Price must be positive'),
+  cost_price: z.number().positive('Cost price must be positive').optional(),
+  sku: z.string().max(100, 'SKU must be less than 100 characters').optional(),
+  stock_quantity: z.number().int().min(0, 'Stock quantity cannot be negative'),
+  status: z.enum(['active', 'inactive', 'draft']).default('active'),
+  featured: z.boolean().default(false),
+  images: z.array(z.string().url('Invalid image URL')).optional(),
+  dimensions: z.object({
+    length: z.number().positive().optional(),
+    width: z.number().positive().optional(),
+    height: z.number().positive().optional(),
+    unit: z.string().max(10).optional(),
+  }).optional(),
+  weight: z.number().positive().optional(),
+  weight_unit: z.string().max(10).optional(),
+  tags: z.array(z.string().max(50)).optional(),
+  seo_title: z.string().max(60).optional(),
+  seo_description: z.string().max(160).optional(),
+})
+
+export const updateProductSchema = createProductSchema.partial().extend({
+  id: z.string().uuid('Invalid product ID'),
+})
+
+export const productFiltersSchema = z.object({
+  search: z.string().optional(),
+  category_id: z.string().uuid().optional(),
+  status: z.enum(['active', 'inactive', 'draft']).optional(),
+  featured: z.boolean().optional(),
+  min_price: z.number().positive().optional(),
+  max_price: z.number().positive().optional(),
+  low_stock: z.boolean().optional(),
+  sort_by: z.enum(['name', 'price', 'stock_quantity', 'created_at', 'updated_at']).default('created_at'),
+  sort_order: z.enum(['asc', 'desc']).default('desc'),
+  limit: z.number().int().min(1).max(100).default(20),
+  offset: z.number().int().min(0).default(0),
+})
+
+export const createCategorySchema = z.object({
+  name: z.string().min(1, 'Category name is required').max(100, 'Category name must be less than 100 characters'),
+  description: z.string().max(500, 'Description must be less than 500 characters').optional(),
+  slug: z.string().min(1, 'Slug is required').max(100, 'Slug must be less than 100 characters'),
+  image: z.string().url('Invalid image URL').optional(),
+  parent_id: z.string().uuid().optional(),
+  sort_order: z.number().int().min(0).default(0),
+  status: z.enum(['active', 'inactive']).default('active'),
+})
+
+export const updateCategorySchema = createCategorySchema.partial().extend({
+  id: z.string().uuid('Invalid category ID'),
+})
+
+export type CreateProductInput = z.infer<typeof createProductSchema>
+export type UpdateProductInput = z.infer<typeof updateProductSchema>
+export type ProductFiltersInput = z.infer<typeof productFiltersSchema>
+export type CreateCategoryInput = z.infer<typeof createCategorySchema>
+export type UpdateCategoryInput = z.infer<typeof updateCategorySchema>

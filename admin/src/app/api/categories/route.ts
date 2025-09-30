@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
     const { data, error } = await supabase
       .from('categories')
       .select('*')
-      .eq('status', 'active')
+      .eq('is_active', true)
       .order('sort_order', { ascending: true })
       .order('name', { ascending: true })
 
@@ -47,15 +47,15 @@ export async function POST(request: NextRequest) {
     // Validate input
     const validatedData = createCategorySchema.parse(body)
 
-    // Check if slug already exists
+    // Check if name already exists
     const { data: existingCategory } = await supabase
       .from('categories')
       .select('id')
-      .eq('slug', validatedData.slug)
+      .eq('name', validatedData.name)
       .single()
 
     if (existingCategory) {
-      return NextResponse.json({ error: 'Category slug already exists' }, { status: 400 })
+      return NextResponse.json({ error: 'Category name already exists' }, { status: 400 })
     }
 
     const { data, error } = await supabase

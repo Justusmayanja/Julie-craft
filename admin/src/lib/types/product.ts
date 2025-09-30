@@ -22,7 +22,6 @@ export interface Product {
     unit?: string
   }
   weight?: number
-  weight_unit?: string
   tags?: string[]
   seo_title?: string
   seo_description?: string
@@ -48,7 +47,6 @@ export interface CreateProductData {
     unit?: string
   }
   weight?: number
-  weight_unit?: string
   tags?: string[]
   seo_title?: string
   seo_description?: string
@@ -85,11 +83,10 @@ export interface Category {
   id: string
   name: string
   description?: string
-  slug: string
-  image?: string
-  parent_id?: string
+  image_url?: string
   sort_order?: number
-  status: 'active' | 'inactive'
+  is_active: boolean
+  tags?: string[]
   created_at: string
   updated_at: string
 }

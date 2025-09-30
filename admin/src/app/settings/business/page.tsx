@@ -19,7 +19,7 @@ export default function BusinessSettingsPage() {
     description: "Handmade crafts created with love and passion. Each piece tells a unique story of artisanal craftsmanship.",
     logo: "/craft-logo.jpeg",
     timezone: "America/Los_Angeles",
-    currency: "USD"
+    currency: "UGX"
   }
 
   return (
@@ -76,6 +76,7 @@ export default function BusinessSettingsPage() {
                 <div>
                   <label className="text-sm font-medium text-gray-700 mb-2 block">Currency</label>
                   <select className="w-full p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                    <option value="UGX">UGX - Ugandan Shilling</option>
                     <option value="USD">USD - US Dollar</option>
                     <option value="EUR">EUR - Euro</option>
                     <option value="GBP">GBP - British Pound</option>

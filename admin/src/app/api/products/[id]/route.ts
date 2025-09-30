@@ -58,6 +58,9 @@ export async function PUT(
     const { id } = await params
     const body = await request.json()
     
+    console.log('Received product data:', body)
+    console.log('Product ID:', id)
+    
     // Validate input
     const validatedData = updateProductSchema.parse({ ...body, id })
 
@@ -90,7 +93,13 @@ export async function PUT(
   } catch (error) {
     console.error('API error:', error)
     if (error instanceof Error && error.name === 'ZodError') {
-      return NextResponse.json({ error: 'Invalid product data' }, { status: 400 })
+      console.error('Validation error details:', error)
+      console.error('Zod error issues:', (error as any).issues)
+      return NextResponse.json({ 
+        error: 'Invalid product data',
+        details: error.message,
+        issues: (error as any).issues
+      }, { status: 400 })
     }
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

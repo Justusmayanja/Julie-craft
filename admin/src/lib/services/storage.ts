@@ -1,17 +1,21 @@
-import { createClient } from '@/lib/supabase/client'
+import { createClient } from '@/lib/supabase/server'
 
 export class StorageService {
-  private supabase = createClient()
+  private async getSupabase() {
+    return await createClient()
+  }
 
   async uploadProductImage(file: File, productId: string): Promise<string> {
     try {
+      const supabase = await this.getSupabase()
+      
       // Generate unique filename
       const fileExt = file.name.split('.').pop()
       const fileName = `${productId}-${Date.now()}.${fileExt}`
       const filePath = `products/${fileName}`
 
       // Upload file to Supabase Storage
-      const { data, error } = await this.supabase.storage
+      const { data, error } = await supabase.storage
         .from('products')
         .upload(filePath, file, {
           cacheControl: '3600',
@@ -23,7 +27,7 @@ export class StorageService {
       }
 
       // Get public URL
-      const { data: { publicUrl } } = this.supabase.storage
+      const { data: { publicUrl } } = supabase.storage
         .from('products')
         .getPublicUrl(filePath)
 
@@ -36,12 +40,14 @@ export class StorageService {
 
   async deleteProductImage(imageUrl: string): Promise<void> {
     try {
+      const supabase = await this.getSupabase()
+      
       // Extract file path from URL
       const url = new URL(imageUrl)
       const pathParts = url.pathname.split('/')
       const filePath = pathParts.slice(-2).join('/') // Get 'products/filename'
 
-      const { error } = await this.supabase.storage
+      const { error } = await supabase.storage
         .from('products')
         .remove([filePath])
 
@@ -56,13 +62,15 @@ export class StorageService {
 
   async uploadCategoryImage(file: File, categoryId: string): Promise<string> {
     try {
+      const supabase = await this.getSupabase()
+      
       // Generate unique filename
       const fileExt = file.name.split('.').pop()
       const fileName = `${categoryId}-${Date.now()}.${fileExt}`
       const filePath = `categories/${fileName}`
 
       // Upload file to Supabase Storage
-      const { data, error } = await this.supabase.storage
+      const { data, error } = await supabase.storage
         .from('media')
         .upload(filePath, file, {
           cacheControl: '3600',
@@ -74,7 +82,7 @@ export class StorageService {
       }
 
       // Get public URL
-      const { data: { publicUrl } } = this.supabase.storage
+      const { data: { publicUrl } } = supabase.storage
         .from('media')
         .getPublicUrl(filePath)
 
@@ -87,12 +95,14 @@ export class StorageService {
 
   async deleteCategoryImage(imageUrl: string): Promise<void> {
     try {
+      const supabase = await this.getSupabase()
+      
       // Extract file path from URL
       const url = new URL(imageUrl)
       const pathParts = url.pathname.split('/')
       const filePath = pathParts.slice(-2).join('/') // Get 'categories/filename'
 
-      const { error } = await this.supabase.storage
+      const { error } = await supabase.storage
         .from('media')
         .remove([filePath])
 
@@ -107,13 +117,15 @@ export class StorageService {
 
   async uploadAvatar(file: File, userId: string): Promise<string> {
     try {
+      const supabase = await this.getSupabase()
+      
       // Generate unique filename
       const fileExt = file.name.split('.').pop()
       const fileName = `${userId}-${Date.now()}.${fileExt}`
       const filePath = `avatars/${fileName}`
 
       // Upload file to Supabase Storage
-      const { data, error } = await this.supabase.storage
+      const { data, error } = await supabase.storage
         .from('avatars')
         .upload(filePath, file, {
           cacheControl: '3600',
@@ -125,7 +137,7 @@ export class StorageService {
       }
 
       // Get public URL
-      const { data: { publicUrl } } = this.supabase.storage
+      const { data: { publicUrl } } = supabase.storage
         .from('avatars')
         .getPublicUrl(filePath)
 
@@ -138,12 +150,14 @@ export class StorageService {
 
   async deleteAvatar(imageUrl: string): Promise<void> {
     try {
+      const supabase = await this.getSupabase()
+      
       // Extract file path from URL
       const url = new URL(imageUrl)
       const pathParts = url.pathname.split('/')
       const filePath = pathParts.slice(-2).join('/') // Get 'avatars/filename'
 
-      const { error } = await this.supabase.storage
+      const { error } = await supabase.storage
         .from('avatars')
         .remove([filePath])
 

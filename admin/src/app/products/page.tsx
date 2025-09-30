@@ -29,13 +29,18 @@ import {
   RefreshCw
 } from "lucide-react"
 import { useProducts, useProductStats, useCategories } from "@/hooks/use-products"
-import { ProductFilters } from "@/lib/types/product"
+import { ProductFilters, Product } from "@/lib/types/product"
+import { useToast } from "@/components/ui/toast"
+import { ProductModal } from "@/components/product-modal"
 
 export default function ProductsPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("All")
   const [currentPage, setCurrentPage] = useState(0)
   const [pageSize] = useState(20)
+  const [modalProduct, setModalProduct] = useState<Product | null>(null)
+  const [modalMode, setModalMode] = useState<'view' | 'edit' | 'add'>('view')
+  const [isModalOpen, setIsModalOpen] = useState(false)
 
   // Build filters for API
   const filters: ProductFilters = {
@@ -50,10 +55,107 @@ export default function ProductsPage() {
   // Fetch data from API
   const { products, loading, error, total, refetch } = useProducts(filters)
   const { stats, loading: statsLoading, refetch: refetchStats } = useProductStats()
-  const { categories, loading: categoriesLoading } = useCategories()
+  const { categories, loading: categoriesLoading, error: categoriesError } = useCategories()
+  const { addToast } = useToast()
+
+  // Debug categories
+  console.log('Categories:', categories)
+  console.log('Categories loading:', categoriesLoading)
+  console.log('Categories error:', categoriesError)
 
   const handleRefresh = async () => {
     await Promise.all([refetch(), refetchStats()])
+  }
+
+  const handleViewProduct = (product: Product) => {
+    setModalProduct(product)
+    setModalMode('view')
+    setIsModalOpen(true)
+  }
+
+  const handleEditProduct = (product: Product) => {
+    setModalProduct(product)
+    setModalMode('edit')
+    setIsModalOpen(true)
+  }
+
+  const handleDeleteProduct = async (product: Product) => {
+    if (!confirm(`Are you sure you want to delete "${product.name}"?`)) {
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/products/${product.id}`, {
+        method: 'DELETE',
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to delete product')
+      }
+
+      addToast({
+        type: 'success',
+        title: 'Product Deleted',
+        description: `Product "${product.name}" deleted successfully`
+      })
+      await refetch()
+      await refetchStats()
+    } catch (error) {
+      console.error('Error deleting product:', error)
+      addToast({
+        type: 'error',
+        title: 'Delete Failed',
+        description: 'Failed to delete product'
+      })
+    }
+  }
+
+  const handleAddProduct = () => {
+    setModalProduct(null)
+    setModalMode('add')
+    setIsModalOpen(true)
+  }
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false)
+    setModalProduct(null)
+  }
+
+  const handleSaveProduct = async (productData: Partial<Product>) => {
+    try {
+      if (modalMode === 'add') {
+        const response = await fetch('/api/products', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(productData),
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json()
+          console.error('Create product error:', errorData)
+          throw new Error(errorData.details || 'Failed to create product')
+        }
+      } else if (modalMode === 'edit' && modalProduct) {
+        const response = await fetch(`/api/products/${modalProduct.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(productData),
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json()
+          console.error('Update product error:', errorData)
+          throw new Error(errorData.details || 'Failed to update product')
+        }
+      }
+    } catch (error) {
+      console.error('Error saving product:', error)
+      throw error
+    }
   }
 
   return (
@@ -77,10 +179,13 @@ export default function ProductsPage() {
                 <RefreshCw className={`w-4 h-4 mr-2 ${(loading || statsLoading) ? 'animate-spin' : ''}`} />
                 Refresh
               </Button>
-              <Button className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm">
-                <Plus className="w-4 h-4 mr-2" />
-                Add Product
-              </Button>
+              <Button 
+                onClick={handleAddProduct}
+                className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
+              >
+              <Plus className="w-4 h-4 mr-2" />
+              Add Product
+            </Button>
             </div>
           </div>
 
@@ -252,74 +357,89 @@ export default function ProductsPage() {
                       </TableRow>
                     ) : (
                       products.map((product) => (
-                        <TableRow key={product.id} className="hover:bg-gray-50/50 transition-colors">
-                          <TableCell className="py-4">
-                            <div className="w-14 h-14 bg-gray-100 rounded-lg overflow-hidden shadow-sm">
+                      <TableRow key={product.id} className="hover:bg-gray-50/50 transition-colors">
+                        <TableCell className="py-4">
+                          <div className="w-14 h-14 bg-gray-100 rounded-lg overflow-hidden shadow-sm">
                               {product.images && product.images.length > 0 ? (
-                                <img 
+                            <img 
                                   src={product.images[0]} 
-                                  alt={product.name}
-                                  className="w-full h-full object-cover"
-                                />
+                              alt={product.name}
+                              className="w-full h-full object-cover"
+                            />
                               ) : (
                                 <div className="w-full h-full flex items-center justify-center">
                                   <ImageIcon className="w-6 h-6 text-gray-400" />
                                 </div>
                               )}
-                            </div>
-                          </TableCell>
-                          <TableCell className="py-4">
-                            <div className="space-y-1">
-                              <div className="font-semibold text-gray-900">{product.name}</div>
-                              {product.featured && (
-                                <Badge className="text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 border-blue-200">
-                                  <Star className="w-3 h-3 mr-1 fill-current" />
-                                  Featured
-                                </Badge>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell className="py-4">
-                            <Badge variant="outline" className="bg-white text-gray-700 border-gray-300">
+                          </div>
+                        </TableCell>
+                        <TableCell className="py-4">
+                          <div className="space-y-1">
+                            <div className="font-semibold text-gray-900">{product.name}</div>
+                            {product.featured && (
+                              <Badge className="text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 border-blue-200">
+                                <Star className="w-3 h-3 mr-1 fill-current" />
+                                Featured
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="py-4">
+                          <Badge variant="outline" className="bg-white text-gray-700 border-gray-300">
                               {product.category?.name || 'Uncategorized'}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="py-4 font-semibold text-gray-900">{product.price.toLocaleString()} UGX</TableCell>
-                          <TableCell className="py-4">
-                            <div className="flex items-center space-x-2">
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="py-4 font-semibold text-gray-900">{product.price.toLocaleString()} UGX</TableCell>
+                        <TableCell className="py-4">
+                          <div className="flex items-center space-x-2">
                               <span className={`font-semibold ${product.stock_quantity <= 5 ? 'text-red-600' : 'text-gray-900'}`}>
                                 {product.stock_quantity}
-                              </span>
+                            </span>
                               {product.stock_quantity <= 5 && (
-                                <AlertTriangle className="w-4 h-4 text-red-500" />
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell className="py-4 text-gray-700">-</TableCell>
-                          <TableCell className="py-4">
-                            <Badge 
-                              className={product.status === 'active' 
-                                ? 'bg-emerald-100 text-emerald-700 border-emerald-200' 
-                                : 'bg-gray-100 text-gray-700 border-gray-200'
-                              }
-                            >
-                              {product.status.charAt(0).toUpperCase() + product.status.slice(1)}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="py-4">
-                          <div className="flex items-center space-x-1">
-                            <Button variant="ghost" size="sm" className="text-gray-600 hover:bg-blue-50 hover:text-blue-700">
-                              <Eye className="w-4 h-4" />
-                            </Button>
-                            <Button variant="ghost" size="sm" className="text-gray-600 hover:bg-blue-50 hover:text-blue-700">
-                              <Edit className="w-4 h-4" />
-                            </Button>
-                            <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700 hover:bg-red-50">
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
+                              <AlertTriangle className="w-4 h-4 text-red-500" />
+                            )}
                           </div>
-                          </TableCell>
-                        </TableRow>
+                        </TableCell>
+                          <TableCell className="py-4 text-gray-700">-</TableCell>
+                        <TableCell className="py-4">
+                          <Badge 
+                            className={product.status === 'active' 
+                              ? 'bg-emerald-100 text-emerald-700 border-emerald-200' 
+                              : 'bg-gray-100 text-gray-700 border-gray-200'
+                            }
+                          >
+                            {product.status.charAt(0).toUpperCase() + product.status.slice(1)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="py-4">
+                        <div className="flex items-center space-x-1">
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => handleViewProduct(product)}
+                              className="text-gray-600 hover:bg-blue-50 hover:text-blue-700"
+                            >
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => handleEditProduct(product)}
+                              className="text-gray-600 hover:bg-blue-50 hover:text-blue-700"
+                            >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => handleDeleteProduct(product)}
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                        </TableCell>
+                      </TableRow>
                       ))
                     )}
                   </TableBody>
@@ -337,16 +457,48 @@ export default function ProductsPage() {
               </CardHeader>
               <CardContent className="p-4">
                 <div className="flex flex-wrap gap-3">
-                  <Button variant="outline" className="bg-white hover:bg-blue-50 hover:text-blue-700">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => addToast({
+                      type: 'info',
+                      title: 'Export',
+                      description: 'Export functionality coming soon'
+                    })}
+                    className="bg-white hover:bg-blue-50 hover:text-blue-700"
+                  >
                     Export Selected
                   </Button>
-                  <Button variant="outline" className="bg-white hover:bg-emerald-50 hover:text-emerald-700">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => addToast({
+                      type: 'info',
+                      title: 'Update Prices',
+                      description: 'Update prices functionality coming soon'
+                    })}
+                    className="bg-white hover:bg-emerald-50 hover:text-emerald-700"
+                  >
                     Update Prices
                   </Button>
-                  <Button variant="outline" className="bg-white hover:bg-blue-50 hover:text-blue-700">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => addToast({
+                      type: 'info',
+                      title: 'Manage Categories',
+                      description: 'Manage categories functionality coming soon'
+                    })}
+                    className="bg-white hover:bg-blue-50 hover:text-blue-700"
+                  >
                     Manage Categories
                   </Button>
-                  <Button variant="outline" className="text-red-600 border-red-300 hover:bg-red-50 bg-white">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => addToast({
+                      type: 'info',
+                      title: 'Delete Selected',
+                      description: 'Delete selected functionality coming soon'
+                    })}
+                    className="text-red-600 border-red-300 hover:bg-red-50 bg-white"
+                  >
                     Delete Selected
                   </Button>
                 </div>
@@ -355,6 +507,17 @@ export default function ProductsPage() {
           )}
         </div>
       </div>
+
+      {/* Product Modal */}
+      <ProductModal
+        product={modalProduct}
+        categories={categories}
+        isOpen={isModalOpen}
+        mode={modalMode}
+        onClose={handleCloseModal}
+        onSave={handleSaveProduct}
+        onRefresh={refetch}
+      />
     </div>
   )
 }

@@ -3,25 +3,24 @@ import { z } from 'zod'
 export const createProductSchema = z.object({
   name: z.string().min(1, 'Product name is required').max(255, 'Product name must be less than 255 characters'),
   description: z.string().min(1, 'Description is required').max(2000, 'Description must be less than 2000 characters'),
-  category_id: z.string().uuid('Invalid category ID'),
+  category_id: z.string().uuid('Invalid category ID').optional(),
   price: z.number().positive('Price must be positive'),
-  cost_price: z.number().positive('Cost price must be positive').optional(),
-  sku: z.string().max(100, 'SKU must be less than 100 characters').optional(),
+  cost_price: z.number().positive('Cost price must be positive').optional().nullable(),
+  sku: z.string().max(100, 'SKU must be less than 100 characters').optional().nullable(),
   stock_quantity: z.number().int().min(0, 'Stock quantity cannot be negative'),
   status: z.enum(['active', 'inactive', 'draft']).default('active'),
   featured: z.boolean().default(false),
-  images: z.array(z.string().url('Invalid image URL')).optional(),
+  images: z.array(z.string().url('Invalid image URL')).optional().nullable(),
   dimensions: z.object({
     length: z.number().positive().optional(),
     width: z.number().positive().optional(),
     height: z.number().positive().optional(),
     unit: z.string().max(10).optional(),
-  }).optional(),
-  weight: z.number().positive().optional(),
-  weight_unit: z.string().max(10).optional(),
-  tags: z.array(z.string().max(50)).optional(),
-  seo_title: z.string().max(60).optional(),
-  seo_description: z.string().max(160).optional(),
+  }).optional().nullable(),
+  weight: z.number().min(0).optional().nullable(),
+  tags: z.array(z.string().max(50)).optional().nullable(),
+  seo_title: z.string().max(60).optional().nullable(),
+  seo_description: z.string().max(160).optional().nullable(),
 })
 
 export const updateProductSchema = createProductSchema.partial().extend({
@@ -45,11 +44,10 @@ export const productFiltersSchema = z.object({
 export const createCategorySchema = z.object({
   name: z.string().min(1, 'Category name is required').max(100, 'Category name must be less than 100 characters'),
   description: z.string().max(500, 'Description must be less than 500 characters').optional(),
-  slug: z.string().min(1, 'Slug is required').max(100, 'Slug must be less than 100 characters'),
-  image: z.string().url('Invalid image URL').optional(),
-  parent_id: z.string().uuid().optional(),
+  image_url: z.string().url('Invalid image URL').optional(),
   sort_order: z.number().int().min(0).default(0),
-  status: z.enum(['active', 'inactive']).default('active'),
+  is_active: z.boolean().default(true),
+  tags: z.array(z.string().max(50)).optional(),
 })
 
 export const updateCategorySchema = createCategorySchema.partial().extend({

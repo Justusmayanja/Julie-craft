@@ -61,7 +61,7 @@ export function AdminHeader({ onMenuClick }: AdminHeaderProps) {
             <input
               type="text"
               placeholder="Search products, orders, customers..."
-              className="pl-10 pr-4 py-2.5 text-sm bg-gray-50/80 border border-gray-200/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500/50 focus:bg-white focus:shadow-lg transition-all duration-300 w-64 xl:w-80 placeholder:text-gray-400 font-medium"
+              className="pl-10 pr-4 py-2.5 text-sm text-gray-900 bg-gray-50/80 border border-gray-200/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500/50 focus:bg-white focus:shadow-lg transition-all duration-300 w-64 xl:w-80 placeholder:text-gray-400 font-medium"
             />
           </div>
         </div>

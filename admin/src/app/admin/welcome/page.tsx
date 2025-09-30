@@ -124,7 +124,7 @@ export default function WelcomePage() {
   }
 
   return (
-    <div className="min-h-screen bg-white overflow-hidden relative">
+    <div className="min-h-screen bg-white overflow-x-hidden overflow-y-auto relative">
       {/* Professional Background Elements */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-blue-50/30 via-purple-50/20 to-indigo-50/30"></div>
@@ -182,17 +182,17 @@ export default function WelcomePage() {
         </div>
 
 
-      <div className="relative z-10 pt-2 pb-4 min-h-screen">
+      <div className="relative z-10 pt-2 pb-4 min-h-screen overflow-y-auto">
         <div className={`max-w-7xl mx-auto transition-all duration-1000 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
           
           {/* Main Content Box */}
-          <div className="bg-white rounded-2xl md:rounded-3xl border-2 border-gray-200 shadow-2xl mx-2 md:mx-4 lg:mx-0 p-3 md:p-4 lg:p-6 h-full">
+          <div className="bg-white rounded-2xl md:rounded-3xl border-2 border-gray-200 shadow-2xl mx-2 md:mx-4 lg:mx-0 p-3 md:p-4 lg:p-6 min-h-full">
             {/* Two Column Layout */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 h-full">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 min-h-full">
               
               {/* Left Column - Welcome Message */}
-              <div className="flex items-center justify-center h-full">
-                <div className="w-full max-w-lg h-full flex flex-col justify-center">
+              <div className="flex items-center justify-center min-h-full">
+                <div className="w-full max-w-lg min-h-full flex flex-col justify-center">
                   <div className="space-y-3 md:space-y-4">
                     <div className="text-center">
                       <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold bg-gradient-to-r from-gray-800 to-blue-600 bg-clip-text text-transparent leading-tight mb-3 md:mb-4">
@@ -225,8 +225,8 @@ export default function WelcomePage() {
               </div>
 
               {/* Right Column - Carousel */}
-              <div className="flex items-center justify-center h-full">
-                <div className="w-full max-w-lg h-full flex flex-col justify-center">
+              <div className="flex items-center justify-center min-h-full">
+                <div className="w-full max-w-lg min-h-full flex flex-col justify-center">
                   <div className="relative">
                     <Carousel 
                       setApi={setApi}

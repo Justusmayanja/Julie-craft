@@ -1,0 +1,22 @@
+{
+  "name": "craft-web-monorepo",
+  "version": "1.0.0",
+  "description": "Craft Web - E-commerce platform with admin dashboard",
+  "private": true,
+  "workspaces": [
+    "admin",
+    "user-site"
+  ],
+  "scripts": {
+    "build:admin": "cd admin && npm run build",
+    "build:user-site": "cd user-site && npm run build",
+    "dev:admin": "cd admin && npm run dev",
+    "dev:user-site": "cd user-site && npm run dev",
+    "install:admin": "cd admin && npm install",
+    "install:user-site": "cd user-site && npm install"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  }
+}

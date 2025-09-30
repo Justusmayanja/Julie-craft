@@ -225,7 +225,7 @@ export function AdminSidebar({ onClose }: AdminSidebarProps) {
   }
 
   return (
-    <div className="w-64 min-w-64 bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 border-r border-slate-700 h-full flex flex-col backdrop-blur-sm">
+    <div className="w-64 min-w-64 bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 border-r border-slate-700 h-screen md:h-full flex flex-col backdrop-blur-sm">
       {/* Brand Header - Enhanced */}
       <div className="flex-shrink-0 p-4 bg-slate-800/95 backdrop-blur-sm border-b border-slate-600">
         <div className="flex items-center justify-between min-w-0">
@@ -262,7 +262,7 @@ export function AdminSidebar({ onClose }: AdminSidebarProps) {
       </div>
       
       {/* Navigation Sections - Enhanced */}
-      <nav className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-6 space-y-7">
+      <nav className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-6 space-y-7 min-h-0">
         {navigationSections.map((section) => (
           <div key={section.title} className="min-w-0">
             <div className="flex items-center space-x-2 px-3 mb-3 min-w-0">

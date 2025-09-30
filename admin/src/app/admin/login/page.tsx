@@ -159,7 +159,7 @@ export default function AdminLoginPage() {
                     autoCapitalize="off"
                     spellCheck="false"
                     data-form-type="other"
-                    className="h-10 w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 text-sm shadow-sm"
+                    className="h-10 w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 sm:text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 text-sm shadow-sm"
                     disabled={loading}
                   />
                 </div>
@@ -181,7 +181,7 @@ export default function AdminLoginPage() {
                       autoCapitalize="off"
                       spellCheck="false"
                       data-form-type="other"
-                      className="h-10 w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 text-sm shadow-sm"
+                      className="h-10 w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg bg-white text-gray-900 sm:text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 text-sm shadow-sm"
                       disabled={loading}
                     />
                     <Button

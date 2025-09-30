@@ -1,0 +1,29 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "admin/package.json",
+      "use": "@vercel/next",
+      "config": {
+        "distDir": ".next"
+      }
+    },
+    {
+      "src": "user-site/package.json", 
+      "use": "@vercel/next",
+      "config": {
+        "distDir": ".next"
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/admin/(.*)",
+      "dest": "/admin/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/user-site/$1"
+    }
+  ]
+}

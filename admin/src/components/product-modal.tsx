@@ -74,7 +74,7 @@ export function ProductModal({
         category_id: product.category_id,
         price: product.price,
         cost_price: product.cost_price || 0,
-        sku: product.sku || '',
+        sku: product.sku || `SKU-${Date.now()}`,
         stock_quantity: product.stock_quantity,
         status: product.status,
         featured: product.featured,
@@ -91,7 +91,7 @@ export function ProductModal({
         category_id: undefined,
         price: 0,
         cost_price: 0,
-        sku: '',
+        sku: `SKU-${Date.now()}`,
         stock_quantity: 0,
         status: 'active',
         featured: false,
@@ -126,14 +126,7 @@ export function ProductModal({
       return
     }
 
-    if (!formData.category_id) {
-      addToast({
-        type: 'error',
-        title: 'Validation Error',
-        description: 'Please select a category'
-      })
-      return
-    }
+    // Category is now optional - no validation required
 
     try {
       setLoading(true)
@@ -167,71 +160,119 @@ export function ProductModal({
     }))
   }
 
-  const handleImageUpload = async (file: File) => {
-    if (!file) return
+      const handleImageUpload = async (file: File) => {
+        if (!file) return
 
-    try {
-      setUploadingImage(true)
-      
-      // Validate file type
-      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
-      if (!allowedTypes.includes(file.type)) {
-        addToast({
-          type: 'error',
-          title: 'Invalid File Type',
-          description: 'Only JPEG, PNG, and WebP images are allowed'
+        try {
+          setUploadingImage(true)
+          
+          // Validate file type
+          const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+          if (!allowedTypes.includes(file.type)) {
+            addToast({
+              type: 'error',
+              title: 'Invalid File Type',
+              description: 'Only JPEG, PNG, and WebP images are allowed'
+            })
+            return
+          }
+
+          // Validate file size (max 2MB for faster uploads)
+          const maxSize = 2 * 1024 * 1024 // 2MB
+          if (file.size > maxSize) {
+            addToast({
+              type: 'error',
+              title: 'File Too Large',
+              description: 'Maximum file size is 2MB for faster uploads'
+            })
+            return
+          }
+
+          // Compress image before upload
+          const compressedFile = await compressImage(file)
+          
+          const uploadFormData = new FormData()
+          uploadFormData.append('file', compressedFile)
+          uploadFormData.append('productId', product?.id || 'new')
+
+          const response = await fetch('/api/products/upload', {
+            method: 'POST',
+            body: uploadFormData,
+          })
+
+          if (!response.ok) {
+            throw new Error('Failed to upload image')
+          }
+
+          const data = await response.json()
+          
+          // Add the new image to the existing images array
+          setFormData(prev => ({
+            ...prev,
+            images: [...(prev.images || []), data.imageUrl]
+          }))
+
+          addToast({
+            type: 'success',
+            title: 'Image Uploaded',
+            description: 'Product image uploaded successfully'
+          })
+        } catch (error) {
+          console.error('Error uploading image:', error)
+          addToast({
+            type: 'error',
+            title: 'Upload Failed',
+            description: 'Failed to upload image'
+          })
+        } finally {
+          setUploadingImage(false)
+        }
+      }
+
+      const compressImage = (file: File): Promise<File> => {
+        return new Promise((resolve) => {
+          const canvas = document.createElement('canvas')
+          const ctx = canvas.getContext('2d')
+          const img = new Image()
+          
+          img.onload = () => {
+            // Calculate new dimensions (max 800px width/height)
+            const maxSize = 800
+            let { width, height } = img
+            
+            if (width > height) {
+              if (width > maxSize) {
+                height = (height * maxSize) / width
+                width = maxSize
+              }
+            } else {
+              if (height > maxSize) {
+                width = (width * maxSize) / height
+                height = maxSize
+              }
+            }
+            
+            canvas.width = width
+            canvas.height = height
+            
+            // Draw and compress
+            ctx?.drawImage(img, 0, 0, width, height)
+            canvas.toBlob((blob) => {
+              if (blob) {
+                const compressedFile = new File([blob], file.name, {
+                  type: 'image/jpeg',
+                  lastModified: Date.now()
+                })
+                resolve(compressedFile)
+              } else {
+                resolve(file)
+              }
+            }, 'image/jpeg', 0.8) // 80% quality
+          }
+          
+          img.src = URL.createObjectURL(file)
         })
-        return
       }
-
-      // Validate file size (max 5MB)
-      const maxSize = 5 * 1024 * 1024 // 5MB
-      if (file.size > maxSize) {
-        addToast({
-          type: 'error',
-          title: 'File Too Large',
-          description: 'Maximum file size is 5MB'
-        })
-        return
-      }
-
-      const uploadFormData = new FormData()
-      uploadFormData.append('file', file)
-      uploadFormData.append('productId', product?.id || 'new')
-
-      const response = await fetch('/api/products/upload', {
-        method: 'POST',
-        body: uploadFormData,
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to upload image')
-      }
-
-      const data = await response.json()
-      
-      // Add the new image to the existing images array
-      setFormData(prev => ({
-        ...prev,
-        images: [...(prev.images || []), data.imageUrl]
-      }))
-
-      addToast({
-        type: 'success',
-        title: 'Image Uploaded',
-        description: 'Product image uploaded successfully'
-      })
-    } catch (error) {
-      console.error('Error uploading image:', error)
-      addToast({
-        type: 'error',
-        title: 'Upload Failed',
-        description: 'Failed to upload image'
-      })
-    } finally {
-      setUploadingImage(false)
-    }
-  }
 
   const handleRemoveImage = (index: number) => {
     setFormData(prev => ({
@@ -279,17 +320,17 @@ export function ProductModal({
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="sku" className="text-gray-700 font-medium">SKU</Label>
-                <Input
-                  id="sku"
-                  value={formData.sku || ''}
-                  onChange={(e) => handleInputChange('sku', e.target.value)}
-                  placeholder="Enter SKU"
-                  disabled={isReadOnly}
-                  className="bg-white border-gray-300 text-gray-900 placeholder-gray-500 focus:border-blue-500 focus:ring-blue-500"
-                />
-              </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="sku" className="text-gray-700 font-medium">SKU</Label>
+                    <Input
+                      id="sku"
+                      value={formData.sku || ''}
+                      placeholder="Auto-generated"
+                      disabled={true}
+                      className="bg-gray-50 border-gray-300 text-gray-600 cursor-not-allowed"
+                    />
+                    <p className="text-xs text-gray-500">SKU will be automatically generated when saved</p>
+                  </div>
             </div>
 
             <div className="space-y-2">
@@ -306,7 +347,7 @@ export function ProductModal({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="category" className="text-gray-700 font-medium">Category *</Label>
+              <Label htmlFor="category" className="text-gray-700 font-medium">Category</Label>
               <Select
                 value={formData.category_id || ''}
                 onValueChange={(value) => handleInputChange('category_id', value || undefined)}
@@ -329,11 +370,11 @@ export function ProductModal({
                   )}
                 </SelectContent>
               </Select>
-              {categories.length === 0 && (
-                <p className="text-xs text-red-500">
-                  No categories found. Please add categories first or check your database connection.
-                </p>
-              )}
+                  {categories.length === 0 && (
+                    <p className="text-xs text-gray-500">
+                      No categories available. You can still save the product without a category.
+                    </p>
+                  )}
             </div>
           </div>
 
@@ -492,9 +533,9 @@ export function ProductModal({
                   <p className="text-sm text-gray-600">
                     {uploadingImage ? 'Uploading...' : 'Click to upload product images'}
                   </p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    PNG, JPG, WebP up to 5MB
-                  </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        PNG, JPG, WebP up to 2MB (auto-compressed)
+                      </p>
                 </label>
               </div>
 

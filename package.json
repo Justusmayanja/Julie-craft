@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Craft Web - E-commerce platform with admin dashboard",
   "private": true,
+  "type": "module",
   "workspaces": [
     "admin",
     "user-site"
@@ -18,5 +19,9 @@
   "engines": {
     "node": ">=18.0.0",
     "npm": ">=8.0.0"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.3.1",
+    "eslint-config-next": "^15.5.4"
   }
 }

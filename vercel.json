@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "projects": [
+    {
+      "source": "admin",
+      "framework": "nextjs"
+    },
+    {
+      "source": "user-site", 
+      "framework": "nextjs"
+    }
+  ]
+}

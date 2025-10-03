@@ -29,6 +29,7 @@ import {
   RefreshCw
 } from "lucide-react"
 import { useProducts, useProductStats, useCategories } from "@/hooks/use-products"
+import { useProductBulk } from "@/hooks/use-product-bulk"
 import { ProductFilters, Product } from "@/lib/types/product"
 import { useToast } from "@/components/ui/toast"
 import { ProductModal } from "@/components/product-modal"
@@ -41,11 +42,26 @@ export default function ProductsPage() {
   const [modalProduct, setModalProduct] = useState<Product | null>(null)
   const [modalMode, setModalMode] = useState<'view' | 'edit' | 'add'>('view')
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [showBulkActions, setShowBulkActions] = useState(false)
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
+  const [advancedFilters, setAdvancedFilters] = useState({
+    minPrice: '',
+    maxPrice: '',
+    minStock: '',
+    maxStock: '',
+    status: 'All',
+    featured: 'All'
+  })
 
   // Build filters for API
   const filters: ProductFilters = {
     search: searchTerm || undefined,
     category_id: selectedCategory !== "All" ? selectedCategory : undefined,
+    status: advancedFilters.status !== "All" ? advancedFilters.status as any : undefined,
+    featured: advancedFilters.featured !== "All" ? advancedFilters.featured === "Yes" : undefined,
+    min_price: advancedFilters.minPrice ? Number(advancedFilters.minPrice) : undefined,
+    max_price: advancedFilters.maxPrice ? Number(advancedFilters.maxPrice) : undefined,
+    low_stock: advancedFilters.minStock ? Number(advancedFilters.minStock) <= 5 : undefined,
     limit: pageSize,
     offset: currentPage * pageSize,
     sort_by: 'created_at',
@@ -57,6 +73,21 @@ export default function ProductsPage() {
   const { stats, loading: statsLoading, refetch: refetchStats } = useProductStats()
   const { categories, loading: categoriesLoading, error: categoriesError } = useCategories()
   const { addToast } = useToast()
+  
+  // Bulk operations
+  const {
+    selectedProducts,
+    toggleProductSelection,
+    selectAllProducts,
+    clearSelection,
+    bulkDelete,
+    bulkUpdateStatus,
+    bulkUpdatePrice,
+    bulkUpdateCategory,
+    bulkUpdateFeatured,
+    exportProducts,
+    loading: bulkLoading
+  } = useProductBulk()
 
   // Debug categories
   console.log('Categories:', categories)
@@ -156,6 +187,57 @@ export default function ProductsPage() {
       console.error('Error saving product:', error)
       throw error
     }
+  }
+
+  // Bulk action handlers
+  const handleBulkDelete = async () => {
+    if (selectedProducts.length === 0) return
+    
+    if (!confirm(`Are you sure you want to delete ${selectedProducts.length} product(s)? This action cannot be undone.`)) {
+      return
+    }
+
+    await bulkDelete(selectedProducts, {
+      onSuccess: (result) => {
+        addToast({
+          type: 'success',
+          title: 'Products Deleted',
+          description: result.message
+        })
+        refetch()
+        refetchStats()
+      },
+      onError: (error) => {
+        addToast({
+          type: 'error',
+          title: 'Delete Failed',
+          description: error
+        })
+      }
+    })
+  }
+
+  const handleBulkExport = async () => {
+    await exportProducts(filters, 'csv')
+    addToast({
+      type: 'success',
+      title: 'Export Started',
+      description: 'Product export will download shortly'
+    })
+  }
+
+  const handleBulkUpdatePrices = () => {
+    // This would open a modal for price update options
+    addToast({
+      type: 'info',
+      title: 'Bulk Price Update',
+      description: 'Price update modal coming soon'
+    })
+  }
+
+  const handleManageCategories = () => {
+    // Navigate to categories page
+    window.location.href = '/categories'
   }
 
   return (
@@ -318,6 +400,20 @@ export default function ProductsPage() {
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-gray-50/50">
+                      <TableHead className="w-12 font-semibold text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={selectedProducts.length === products.length && products.length > 0}
+                          onChange={() => {
+                            if (selectedProducts.length === products.length) {
+                              clearSelection()
+                            } else {
+                              selectAllProducts(products)
+                            }
+                          }}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                      </TableHead>
                       <TableHead className="w-20 font-semibold text-gray-700">Image</TableHead>
                       <TableHead className="font-semibold text-gray-700">Product</TableHead>
                       <TableHead className="font-semibold text-gray-700">Category</TableHead>
@@ -331,7 +427,7 @@ export default function ProductsPage() {
                   <TableBody>
                     {loading ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center py-8">
+                        <TableCell colSpan={9} className="text-center py-8">
                           <div className="flex items-center justify-center space-x-2">
                             <RefreshCw className="w-4 h-4 animate-spin" />
                             <span>Loading products...</span>
@@ -340,7 +436,7 @@ export default function ProductsPage() {
                       </TableRow>
                     ) : error ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center py-8">
+                        <TableCell colSpan={9} className="text-center py-8">
                           <div className="text-red-600">
                             <AlertTriangle className="w-8 h-8 mx-auto mb-2" />
                             <p>Error loading products: {error}</p>
@@ -349,7 +445,7 @@ export default function ProductsPage() {
                       </TableRow>
                     ) : products.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center py-8">
+                        <TableCell colSpan={9} className="text-center py-8">
                           <Package className="w-16 h-16 text-gray-400 mx-auto mb-4" />
                           <h3 className="text-lg font-semibold text-gray-900 mb-2">No products found</h3>
                           <p className="text-gray-600">Try adjusting your search or filter criteria</p>
@@ -358,6 +454,14 @@ export default function ProductsPage() {
                     ) : (
                       products.map((product) => (
                       <TableRow key={product.id} className="hover:bg-gray-50/50 transition-colors">
+                        <TableCell className="py-4">
+                          <input
+                            type="checkbox"
+                            checked={selectedProducts.includes(product.id)}
+                            onChange={() => toggleProductSelection(product.id)}
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                        </TableCell>
                         <TableCell className="py-4">
                           <div className="w-14 h-14 bg-gray-100 rounded-lg overflow-hidden shadow-sm">
                               {product.images && product.images.length > 0 ? (
@@ -453,54 +557,98 @@ export default function ProductsPage() {
           {products.length > 0 && (
             <Card className="bg-white border-0 shadow-lg">
               <CardHeader className="border-b border-gray-100 pb-4">
-                <CardTitle className="text-lg font-semibold text-gray-900">Bulk Actions</CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg font-semibold text-gray-900">
+                    Bulk Actions
+                    {selectedProducts.length > 0 && (
+                      <span className="ml-2 text-sm font-normal text-gray-600">
+                        ({selectedProducts.length} selected)
+                      </span>
+                    )}
+                  </CardTitle>
+                  {selectedProducts.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={clearSelection}
+                      className="text-gray-500 hover:text-gray-700"
+                    >
+                      Clear Selection
+                    </Button>
+                  )}
+                </div>
               </CardHeader>
               <CardContent className="p-4">
                 <div className="flex flex-wrap gap-3">
                   <Button 
                     variant="outline" 
-                    onClick={() => addToast({
-                      type: 'info',
-                      title: 'Export',
-                      description: 'Export functionality coming soon'
-                    })}
+                    onClick={handleBulkExport}
+                    disabled={bulkLoading}
                     className="bg-white hover:bg-blue-50 hover:text-blue-700"
                   >
-                    Export Selected
+                    Export All
                   </Button>
                   <Button 
                     variant="outline" 
-                    onClick={() => addToast({
-                      type: 'info',
-                      title: 'Update Prices',
-                      description: 'Update prices functionality coming soon'
-                    })}
+                    onClick={handleBulkUpdatePrices}
+                    disabled={bulkLoading}
                     className="bg-white hover:bg-emerald-50 hover:text-emerald-700"
                   >
                     Update Prices
                   </Button>
                   <Button 
                     variant="outline" 
-                    onClick={() => addToast({
-                      type: 'info',
-                      title: 'Manage Categories',
-                      description: 'Manage categories functionality coming soon'
-                    })}
+                    onClick={handleManageCategories}
                     className="bg-white hover:bg-blue-50 hover:text-blue-700"
                   >
                     Manage Categories
                   </Button>
-                  <Button 
-                    variant="outline" 
-                    onClick={() => addToast({
-                      type: 'info',
-                      title: 'Delete Selected',
-                      description: 'Delete selected functionality coming soon'
-                    })}
-                    className="text-red-600 border-red-300 hover:bg-red-50 bg-white"
-                  >
-                    Delete Selected
-                  </Button>
+                  {selectedProducts.length > 0 && (
+                    <>
+                      <Button 
+                        variant="outline" 
+                        onClick={() => bulkUpdateStatus(selectedProducts, 'active', {
+                          onSuccess: () => {
+                            addToast({
+                              type: 'success',
+                              title: 'Status Updated',
+                              description: 'Selected products are now active'
+                            })
+                            refetch()
+                          }
+                        })}
+                        disabled={bulkLoading}
+                        className="bg-white hover:bg-emerald-50 hover:text-emerald-700"
+                      >
+                        Activate Selected
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        onClick={() => bulkUpdateStatus(selectedProducts, 'inactive', {
+                          onSuccess: () => {
+                            addToast({
+                              type: 'success',
+                              title: 'Status Updated',
+                              description: 'Selected products are now inactive'
+                            })
+                            refetch()
+                          }
+                        })}
+                        disabled={bulkLoading}
+                        className="bg-white hover:bg-yellow-50 hover:text-yellow-700"
+                      >
+                        Deactivate Selected
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        onClick={handleBulkDelete}
+                        disabled={bulkLoading}
+                        className="text-red-600 border-red-300 hover:bg-red-50 bg-white"
+                      >
+                        Delete Selected
+                      </Button>
+                    </>
+                  )}
                 </div>
               </CardContent>
             </Card>

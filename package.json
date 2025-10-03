@@ -9,10 +9,12 @@
     "user-site"
   ],
   "scripts": {
+    "build:all": "npm run build:admin && npm run build:user-site",
     "build:admin": "cd admin && npm run build",
     "build:user-site": "cd user-site && npm run build",
     "dev:admin": "cd admin && npm run dev",
     "dev:user-site": "cd user-site && npm run dev",
+    "install:all": "npm run install:admin && npm run install:user-site",
     "install:admin": "cd admin && npm install",
     "install:user-site": "cd user-site && npm install"
   },

@@ -1,36 +1,141 @@
 # Vercel Deployment Guide
 
-## For Admin Project Deployment
+## 🚀 Monorepo Deployment - Correct Approach
 
-### Option 1: Deploy Admin Project Only (Recommended)
-1. Go to Vercel Dashboard
-2. Create a new project
-3. Connect your GitHub repository
-4. Set the **Root Directory** to `admin`
-5. Deploy
+This guide shows you how to properly deploy your monorepo projects on Vercel by selecting the specific project in the Vercel dashboard.
 
-### Option 2: Use Current Configuration
-The `vercel.json` file is configured to deploy the admin project. Just push your changes and redeploy.
+## 📋 Two Deployment Options
 
-## Files Added/Fixed
+### Option 1: Deploy Individual Projects (Recommended)
 
-### ✅ Fixed Issues:
-1. **Added `not-found.tsx`** - Required by Next.js App Router
-2. **Created `vercel.json`** - Proper Vercel configuration
-3. **Added root `package.json`** - Monorepo structure support
+Create **separate Vercel projects** for each application:
 
-### 📁 New Files:
-- `vercel.json` - Vercel deployment configuration
-- `package.json` - Root package.json for monorepo
-- `admin/src/app/not-found.tsx` - 404 error page
+#### For Admin Project:
+1. Go to [Vercel Dashboard](https://vercel.com/dashboard)
+2. Click **"New Project"**
+3. Import your GitHub repository
+4. **Set Root Directory to**: `admin`
+5. Click **"Deploy"**
 
-## Next Steps:
-1. Commit and push these changes
-2. Redeploy on Vercel
-3. The admin project should deploy successfully
+#### For User-Site Project:
+1. Go to [Vercel Dashboard](https://vercel.com/dashboard)
+2. Click **"New Project"**
+3. Import your GitHub repository
+4. **Set Root Directory to**: `user-site`
+5. Click **"Deploy"**
 
-## Alternative: Separate Repositories
-If you continue having issues, consider:
-1. Creating separate repositories for admin and user-site
-2. Deploying each project independently
-3. Using Vercel's monorepo features properly
+### Option 2: Single Project with Subdirectory Selection
+
+1. Go to [Vercel Dashboard](https://vercel.com/dashboard)
+2. Click **"New Project"**
+3. Import your GitHub repository
+4. **Set Root Directory to**: `admin` OR `user-site` (choose one)
+5. Click **"Deploy"**
+
+## 🛠️ Project Configuration
+
+Each project has its own `vercel.json` configuration:
+
+### Admin Project (`admin/vercel.json`):
+```json
+{
+  "version": 2,
+  "framework": "nextjs",
+  "buildCommand": "npm run build",
+  "outputDirectory": ".next"
+}
+```
+
+### User-Site Project (`user-site/vercel.json`):
+```json
+{
+  "version": 2,
+  "framework": "nextjs", 
+  "buildCommand": "npm run build",
+  "outputDirectory": ".next"
+}
+```
+
+## 🚀 Deployment Steps
+
+### For Admin Project:
+1. **In Vercel Dashboard**:
+   - Root Directory: `admin`
+   - Framework: Next.js (auto-detected)
+   - Build Command: `npm run build`
+   - Output Directory: `.next`
+
+2. **Deploy**:
+   ```bash
+   git add .
+   git commit -m "Deploy admin project"
+   git push
+   ```
+
+### For User-Site Project:
+1. **In Vercel Dashboard**:
+   - Root Directory: `user-site`
+   - Framework: Next.js (auto-detected)
+   - Build Command: `npm run build`
+   - Output Directory: `.next`
+
+2. **Deploy**:
+   ```bash
+   git add .
+   git commit -m "Deploy user-site project"
+   git push
+   ```
+
+## 📊 Available Scripts
+
+```bash
+# Development
+npm run dev:user-site     # Run user-site locally
+npm run dev:admin         # Run admin locally
+
+# Building
+npm run build:all         # Build both projects
+npm run build:user-site   # Build user-site only
+npm run build:admin       # Build admin only
+
+# Installation
+npm run install:all       # Install dependencies for both
+npm run install:admin     # Install admin dependencies
+npm run install:user-site # Install user-site dependencies
+```
+
+## ✅ Benefits of This Approach
+
+- **Clear separation**: Each project has its own deployment
+- **Independent scaling**: Scale each app separately
+- **Easy management**: Manage each project independently
+- **No routing conflicts**: Each app has its own domain/subdomain
+- **Vercel best practices**: Follows Vercel's recommended monorepo approach
+
+## 🔍 Troubleshooting
+
+### If deployment fails:
+1. **Check Root Directory**: Ensure it's set correctly in Vercel dashboard
+2. **Verify Build**: Test locally first:
+   ```bash
+   cd admin && npm run build
+   cd ../user-site && npm run build
+   ```
+3. **Check Dependencies**: Ensure all dependencies are installed
+4. **Review Build Logs**: Check Vercel build logs for specific errors
+
+### Common Issues:
+- **Wrong Root Directory**: Make sure it matches your project folder name
+- **Missing Dependencies**: Run `npm install` in the project directory
+- **Build Errors**: Check for TypeScript or linting errors
+- **Environment Variables**: Set up required env vars in Vercel dashboard
+
+## 🌐 Final Result
+
+After deployment, you'll have:
+- **Admin Project**: `your-admin-project.vercel.app`
+- **User-Site Project**: `your-user-site.vercel.app`
+
+Or if using custom domains:
+- **Admin**: `admin.yourdomain.com`
+- **User-Site**: `yourdomain.com`

@@ -6,6 +6,13 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { 
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { 
   Table,
   TableBody,
   TableCell,
@@ -18,7 +25,6 @@ import {
   Filter, 
   Download, 
   Plus,
-  Minus,
   AlertTriangle,
   Package,
   TrendingDown,
@@ -26,99 +32,41 @@ import {
   Warehouse,
   RefreshCw,
   Edit,
-  Eye
+  Eye,
+  MoreHorizontal,
+  BarChart3,
+  DollarSign,
+  ArrowUpDown,
+  Settings
 } from "lucide-react"
+import { useInventory, useInventoryStats, useLowStockItems } from "@/hooks/use-inventory"
+import { InventoryFilters, InventoryItem } from "@/lib/types/inventory"
+import { useToast } from "@/components/ui/toast"
+import { format } from "date-fns"
 
-// Mock data - replace with real data from your database
-const mockInventory = [
-  {
-    id: "INV-001",
-    productName: "Ceramic Bowl Set",
-    sku: "CBS-001",
-    category: "Pottery",
-    currentStock: 12,
-    minStock: 5,
-    maxStock: 50,
-    reorderPoint: 8,
-    unitCost: 35.00,
-    unitPrice: 89.99,
-    totalValue: 420.00,
-    lastRestocked: "2024-01-10",
-    supplier: "Clay Works Inc.",
-    status: "in_stock",
-    movement: "stable"
-  },
-  {
-    id: "INV-002",
-    productName: "Silver Wire Bracelet",
-    sku: "SWB-002",
-    category: "Jewelry",
-    currentStock: 20,
-    minStock: 10,
-    maxStock: 100,
-    reorderPoint: 15,
-    unitCost: 25.00,
-    unitPrice: 67.99,
-    totalValue: 500.00,
-    lastRestocked: "2024-01-08",
-    supplier: "Jewelry Supplies Co.",
-    status: "in_stock",
-    movement: "increasing"
-  },
-  {
-    id: "INV-003",
-    productName: "Blue Glazed Vase",
-    sku: "BGV-003",
-    category: "Pottery",
-    currentStock: 3,
-    minStock: 5,
-    maxStock: 25,
-    reorderPoint: 8,
-    unitCost: 45.00,
-    unitPrice: 124.99,
-    totalValue: 135.00,
-    lastRestocked: "2023-12-20",
-    supplier: "Clay Works Inc.",
-    status: "low_stock",
-    movement: "decreasing"
-  },
-  {
-    id: "INV-004",
-    productName: "Wool Throw Blanket",
-    sku: "WTB-004",
-    category: "Textiles",
-    currentStock: 2,
-    minStock: 5,
-    maxStock: 30,
-    reorderPoint: 8,
-    unitCost: 65.00,
-    unitPrice: 156.99,
-    totalValue: 130.00,
-    lastRestocked: "2023-12-15",
-    supplier: "Textile Masters",
-    status: "critical",
-    movement: "decreasing"
-  },
-  {
-    id: "INV-005",
-    productName: "Copper Earrings",
-    sku: "CE-005",
-    category: "Jewelry",
-    currentStock: 25,
-    minStock: 10,
-    maxStock: 80,
-    reorderPoint: 15,
-    unitCost: 12.00,
-    unitPrice: 29.99,
-    totalValue: 300.00,
-    lastRestocked: "2024-01-05",
-    supplier: "Metal Craft Supply",
-    status: "in_stock",
-    movement: "stable"
-  },
+// Status and filter options
+const statusOptions = [
+  { value: "all", label: "All Items" },
+  { value: "in_stock", label: "In Stock" },
+  { value: "low_stock", label: "Low Stock" },
+  { value: "out_of_stock", label: "Out of Stock" },
+  { value: "discontinued", label: "Discontinued" }
 ]
 
-const statusOptions = ["All", "in_stock", "low_stock", "critical", "out_of_stock"]
+const movementOptions = [
+  { value: "all", label: "All Movement" },
+  { value: "increasing", label: "Increasing" },
+  { value: "decreasing", label: "Decreasing" },
+  { value: "stable", label: "Stable" }
+]
+
+const sortOptions = [
+  { value: "product_name", label: "Product Name" },
+  { value: "current_stock", label: "Stock Level" },
+  { value: "total_value", label: "Total Value" },
+  { value: "last_restocked", label: "Last Restocked" },
+  { value: "created_at", label: "Date Added" }
+]
 
 const getStatusColor = (status: string) => {
   switch (status) {
@@ -150,22 +98,71 @@ const getMovementIcon = (movement: string) => {
 }
 
 export default function InventoryPage() {
-  const [searchTerm, setSearchTerm] = useState("")
-  const [selectedStatus, setSelectedStatus] = useState("All")
-  const [inventory] = useState(mockInventory)
-
-  const filteredInventory = inventory.filter(item => {
-    const matchesSearch = item.productName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         item.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         item.category.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesStatus = selectedStatus === "All" || item.status === selectedStatus
-    return matchesSearch && matchesStatus
+  const [filters, setFilters] = useState<InventoryFilters>({
+    search: "",
+    status: undefined,
+    movement_trend: undefined,
+    sort_by: "product_name",
+    sort_order: "asc",
+    page: 1,
+    limit: 20,
   })
 
-  const totalItems = inventory.length
-  const lowStockItems = inventory.filter(i => i.status === "low_stock" || i.status === "critical").length
-  const totalValue = inventory.reduce((sum, item) => sum + item.totalValue, 0)
-  const avgStockLevel = inventory.reduce((sum, item) => sum + (item.currentStock / item.maxStock * 100), 0) / inventory.length
+  // Real data hooks
+  const { data: inventoryData, loading, error, refetch } = useInventory(filters)
+  const { stats } = useInventoryStats()
+  const { items: lowStockItems } = useLowStockItems()
+  const { addToast } = useToast()
+
+  // Computed values
+  const inventory = inventoryData?.items || []
+  const totalItems = inventoryData?.total || 0
+  const totalPages = inventoryData?.total_pages || 0
+  const currentPage = inventoryData?.page || 1
+
+  // Handle filter changes
+  const updateFilter = (key: keyof InventoryFilters, value: string | number | boolean | undefined) => {
+    setFilters(prev => ({
+      ...prev,
+      [key]: value,
+      page: 1 // Reset to first page when filtering
+    }))
+  }
+
+  const handleSearch = (value: string) => {
+    updateFilter("search", value)
+  }
+
+  const handleStatusFilter = (value: string) => {
+    updateFilter("status", value === "all" ? undefined : value)
+  }
+
+  const handleMovementFilter = (value: string) => {
+    updateFilter("movement_trend", value === "all" ? undefined : value)
+  }
+
+  const handleSort = (sortBy: string) => {
+    const currentSort = filters.sort_by
+    const newOrder = currentSort === sortBy && filters.sort_order === "asc" ? "desc" : "asc"
+    setFilters(prev => ({
+      ...prev,
+      sort_by: sortBy as 'product_name' | 'current_stock' | 'total_value' | 'last_restocked' | 'created_at',
+      sort_order: newOrder as "asc" | "desc"
+    }))
+  }
+
+  const handlePageChange = (page: number) => {
+    setFilters(prev => ({ ...prev, page }))
+  }
+
+  const handleRefresh = () => {
+    refetch()
+    addToast({
+      type: 'success',
+      title: "Inventory Refreshed",
+      description: "Latest inventory data has been loaded.",
+    })
+  }
 
   return (
     <div className="h-full">
@@ -198,10 +195,11 @@ export default function InventoryPage() {
                   <div className="p-1.5 bg-blue-100 rounded-lg group-hover:bg-blue-200 transition-colors">
                     <Warehouse className="h-4 w-4 text-blue-600" />
                   </div>
+                  {loading && <RefreshCw className="h-4 w-4 text-gray-400 animate-spin" />}
                 </div>
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-gray-600">Total Items</p>
-                  <p className="text-xl font-bold text-gray-900">{totalItems}</p>
+                  <p className="text-xl font-bold text-gray-900">{stats?.total_items || totalItems}</p>
                   <p className="text-xs text-gray-500">Inventory items</p>
                 </div>
               </CardContent>
@@ -214,10 +212,11 @@ export default function InventoryPage() {
                   <div className="p-1.5 bg-red-100 rounded-lg group-hover:bg-red-200 transition-colors">
                     <AlertTriangle className="h-4 w-4 text-red-600" />
                   </div>
+                  {loading && <RefreshCw className="h-4 w-4 text-gray-400 animate-spin" />}
                 </div>
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-gray-600">Low Stock Alerts</p>
-                  <p className="text-xl font-bold text-gray-900">{lowStockItems}</p>
+                  <p className="text-xl font-bold text-gray-900">{stats?.low_stock_items || lowStockItems?.length || 0}</p>
                   <p className="text-xs text-gray-500">Need restocking</p>
                 </div>
               </CardContent>
@@ -228,12 +227,13 @@ export default function InventoryPage() {
               <CardContent className="p-4">
                 <div className="flex items-center justify-between mb-3">
                   <div className="p-1.5 bg-emerald-100 rounded-lg group-hover:bg-emerald-200 transition-colors">
-                    <TrendingUp className="h-4 w-4 text-emerald-600" />
+                    <DollarSign className="h-4 w-4 text-emerald-600" />
                   </div>
+                  {loading && <RefreshCw className="h-4 w-4 text-gray-400 animate-spin" />}
                 </div>
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-gray-600">Total Value</p>
-                  <p className="text-xl font-bold text-gray-900">{totalValue.toLocaleString()} UGX</p>
+                  <p className="text-xl font-bold text-gray-900">{stats?.total_value?.toLocaleString() || "0"} UGX</p>
                   <p className="text-xs text-gray-500">Inventory value</p>
                 </div>
               </CardContent>
@@ -244,12 +244,13 @@ export default function InventoryPage() {
               <CardContent className="p-4">
                 <div className="flex items-center justify-between mb-3">
                   <div className="p-1.5 bg-blue-100 rounded-lg group-hover:bg-blue-200 transition-colors">
-                    <Package className="h-4 w-4 text-blue-600" />
+                    <BarChart3 className="h-4 w-4 text-blue-600" />
                   </div>
+                  {loading && <RefreshCw className="h-4 w-4 text-gray-400 animate-spin" />}
                 </div>
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-gray-600">Avg Stock Level</p>
-                  <p className="text-xl font-bold text-gray-900">{avgStockLevel.toFixed(1)}%</p>
+                  <p className="text-xl font-bold text-gray-900">{stats?.average_stock_level?.toFixed(1) || "0"}%</p>
                   <p className="text-xs text-gray-500">Of maximum capacity</p>
                 </div>
               </CardContent>
@@ -268,129 +269,248 @@ export default function InventoryPage() {
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                   <Input
                     placeholder="Search inventory..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 w-full sm:w-80 bg-white border-gray-300 focus:ring-blue-500 focus:border-blue-500"
+                    value={filters.search || ""}
+                    onChange={(e) => handleSearch(e.target.value)}
+                    className="pl-10 w-full sm:w-80 bg-white border-gray-300 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-500"
                   />
                 </div>
                 
-                {/* Status Filter */}
+                {/* Filters */}
                 <div className="flex flex-wrap gap-2">
-                  {statusOptions.map((status) => (
-                    <Button
-                      key={status}
-                      variant={selectedStatus === status ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setSelectedStatus(status)}
-                      className={selectedStatus === status ? "bg-blue-500 hover:bg-blue-600 text-white shadow-sm" : "bg-white hover:bg-blue-50 hover:text-blue-700 border-gray-300 text-gray-700"}
-                    >
-                      {status === "All" ? status : status.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
-                    </Button>
-                  ))}
+                  <Select value={filters.status || "all"} onValueChange={handleStatusFilter}>
+                    <SelectTrigger className="w-[140px] bg-white border-gray-300 text-gray-900">
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {statusOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Select value={filters.movement_trend || "all"} onValueChange={handleMovementFilter}>
+                    <SelectTrigger className="w-[140px] bg-white border-gray-300 text-gray-900">
+                      <SelectValue placeholder="Movement" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {movementOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Select value={filters.sort_by || "product_name"} onValueChange={handleSort}>
+                    <SelectTrigger className="w-[140px] bg-white border-gray-300 text-gray-900">
+                      <SelectValue placeholder="Sort by" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {sortOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setFilters({
+                      search: "",
+                      status: undefined,
+                      movement_trend: undefined,
+                      sort_by: "product_name",
+                      sort_order: "asc",
+                      page: 1,
+                      limit: 20,
+                    })}
+                    className="bg-white hover:bg-gray-50 border-gray-300 text-gray-900 hover:text-gray-900"
+                  >
+                    <Filter className="w-4 h-4 mr-2" />
+                    Clear
+                  </Button>
                 </div>
               </div>
             </CardHeader>
         
             <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-gray-50/50">
-                      <TableHead className="font-semibold text-gray-700">Product</TableHead>
-                      <TableHead className="font-semibold text-gray-700">Stock Level</TableHead>
-                      <TableHead className="font-semibold text-gray-700">Status</TableHead>
-                      <TableHead className="font-semibold text-gray-700">Movement</TableHead>
-                      <TableHead className="font-semibold text-gray-700">Value</TableHead>
-                      <TableHead className="font-semibold text-gray-700">Supplier</TableHead>
-                      <TableHead className="font-semibold text-gray-700">Last Restocked</TableHead>
-                      <TableHead className="w-24 font-semibold text-gray-700">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredInventory.map((item) => (
-                      <TableRow key={item.id} className="hover:bg-gray-50/50 transition-colors">
-                        <TableCell className="py-4">
-                          <div>
-                            <div className="font-semibold text-gray-900">{item.productName}</div>
-                            <div className="text-sm text-gray-600">{item.sku} • {item.category}</div>
-                          </div>
-                        </TableCell>
-                        <TableCell className="py-4">
-                          <div className="space-y-2">
-                            <div className="flex items-center space-x-2">
-                              <span className="font-semibold text-gray-900">{item.currentStock}</span>
-                              <span className="text-sm text-gray-500">/ {item.maxStock}</span>
-                              {item.currentStock <= item.reorderPoint && (
-                                <AlertTriangle className="w-4 h-4 text-red-500" />
-                              )}
-                            </div>
-                            <div className="w-full bg-gray-200 rounded-full h-2.5">
-                              <div 
-                                className={`h-2.5 rounded-full ${
-                                  item.currentStock <= item.minStock 
-                                    ? 'bg-red-500' 
-                                    : item.currentStock <= item.reorderPoint 
-                                    ? 'bg-blue-500' 
-                                    : 'bg-emerald-500'
-                                }`}
-                                style={{ width: `${(item.currentStock / item.maxStock) * 100}%` }}
-                              ></div>
-                            </div>
-                            <div className="text-xs text-gray-600 font-medium">
-                              Min: {item.minStock} | Reorder: {item.reorderPoint}
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell className="py-4">
-                          <Badge className={getStatusColor(item.status)}>
-                            <div className="flex items-center space-x-1">
-                              {getStatusIcon(item.status)}
-                              <span>{item.status.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</span>
-                            </div>
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="py-4">
-                          <div className="flex items-center space-x-2">
-                            {getMovementIcon(item.movement)}
-                            <span className="text-sm text-gray-700 capitalize font-medium">{item.movement}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="py-4">
-                          <div>
-                            <div className="font-semibold text-gray-900">{item.totalValue.toLocaleString()} UGX</div>
-                            <div className="text-sm text-gray-600">{item.unitCost.toLocaleString()} UGX cost • {item.unitPrice.toLocaleString()} UGX retail</div>
-                          </div>
-                        </TableCell>
-                        <TableCell className="py-4">
-                          <div className="text-sm text-gray-700 font-medium">{item.supplier}</div>
-                        </TableCell>
-                        <TableCell className="py-4">
-                          <div className="text-sm text-gray-700">{item.lastRestocked}</div>
-                        </TableCell>
-                        <TableCell className="py-4">
-                          <div className="flex items-center space-x-1">
-                            <Button variant="ghost" size="sm" className="text-gray-600 hover:bg-blue-50 hover:text-blue-700">
-                              <Eye className="w-4 h-4" />
-                            </Button>
-                            <Button variant="ghost" size="sm" className="text-gray-600 hover:bg-blue-50 hover:text-blue-700">
-                              <Edit className="w-4 h-4" />
-                            </Button>
-                            <Button variant="ghost" size="sm" className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50">
-                              <Plus className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+              {/* Loading State */}
+              {loading && (
+                <div className="text-center py-12 px-4">
+                  <RefreshCw className="w-8 h-8 text-gray-400 mx-auto mb-4 animate-spin" />
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Loading inventory...</h3>
+                  <p className="text-gray-600">Please wait while we fetch your inventory data</p>
+                </div>
+              )}
 
-              {filteredInventory.length === 0 && (
+              {/* Error State */}
+              {error && (
+                <div className="text-center py-12 px-4">
+                  <AlertTriangle className="w-16 h-16 text-red-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Error loading inventory</h3>
+                  <p className="text-gray-600 mb-4">{error}</p>
+                  <Button onClick={handleRefresh} variant="outline">
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Try Again
+                  </Button>
+                </div>
+              )}
+
+              {/* Table Content */}
+              {!loading && !error && (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-gray-50/50">
+                        <TableHead className="font-semibold text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort("product_name")}>
+                          <div className="flex items-center space-x-1">
+                            <span>Product</span>
+                            <ArrowUpDown className="w-3 h-3" />
+                          </div>
+                        </TableHead>
+                        <TableHead className="font-semibold text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort("current_stock")}>
+                          <div className="flex items-center space-x-1">
+                            <span>Stock Level</span>
+                            <ArrowUpDown className="w-3 h-3" />
+                          </div>
+                        </TableHead>
+                        <TableHead className="font-semibold text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort("status")}>
+                          <div className="flex items-center space-x-1">
+                            <span>Status</span>
+                            <ArrowUpDown className="w-3 h-3" />
+                          </div>
+                        </TableHead>
+                        <TableHead className="font-semibold text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort("movement_trend")}>
+                          <div className="flex items-center space-x-1">
+                            <span>Movement</span>
+                            <ArrowUpDown className="w-3 h-3" />
+                          </div>
+                        </TableHead>
+                        <TableHead className="font-semibold text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort("total_value")}>
+                          <div className="flex items-center space-x-1">
+                            <span>Value</span>
+                            <ArrowUpDown className="w-3 h-3" />
+                          </div>
+                        </TableHead>
+                        <TableHead className="font-semibold text-gray-700">Supplier</TableHead>
+                        <TableHead className="font-semibold text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort("last_restocked")}>
+                          <div className="flex items-center space-x-1">
+                            <span>Last Restocked</span>
+                            <ArrowUpDown className="w-3 h-3" />
+                          </div>
+                        </TableHead>
+                        <TableHead className="w-24 font-semibold text-gray-700">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {inventory.map((item: InventoryItem) => (
+                        <TableRow key={item.id} className="hover:bg-gray-50/50 transition-colors">
+                          <TableCell className="py-4">
+                            <div>
+                              <div className="font-semibold text-gray-900">{item.product_name}</div>
+                              <div className="text-sm text-gray-600">{item.sku} • {item.category_name}</div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="py-4">
+                            <div className="space-y-2">
+                              <div className="flex items-center space-x-2">
+                                <span className="font-semibold text-gray-900">{item.current_stock}</span>
+                                <span className="text-sm text-gray-500">/ {item.max_stock}</span>
+                                {item.current_stock <= item.reorder_point && (
+                                  <AlertTriangle className="w-4 h-4 text-red-500" />
+                                )}
+                              </div>
+                              <div className="w-full bg-gray-200 rounded-full h-2.5">
+                                <div 
+                                  className={`h-2.5 rounded-full ${
+                                    item.current_stock <= item.min_stock 
+                                      ? 'bg-red-500' 
+                                      : item.current_stock <= item.reorder_point 
+                                      ? 'bg-blue-500' 
+                                      : 'bg-emerald-500'
+                                  }`}
+                                  style={{ width: `${(item.current_stock / item.max_stock) * 100}%` }}
+                                ></div>
+                              </div>
+                              <div className="text-xs text-gray-600 font-medium">
+                                Min: {item.min_stock} | Reorder: {item.reorder_point}
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="py-4">
+                            <Badge className={getStatusColor(item.status)}>
+                              <div className="flex items-center space-x-1">
+                                {getStatusIcon(item.status)}
+                                <span>{item.status.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</span>
+                              </div>
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="py-4">
+                            <div className="flex items-center space-x-2">
+                              {getMovementIcon(item.movement_trend)}
+                              <span className="text-sm text-gray-700 capitalize font-medium">{item.movement_trend}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="py-4">
+                            <div>
+                              <div className="font-semibold text-gray-900">{item.total_value?.toLocaleString() || "0"} UGX</div>
+                              <div className="text-sm text-gray-600">
+                                {item.unit_cost?.toLocaleString() || "0"} UGX cost • {item.unit_price?.toLocaleString() || "0"} UGX retail
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="py-4">
+                            <div className="text-sm text-gray-700 font-medium">{item.supplier || "N/A"}</div>
+                          </TableCell>
+                          <TableCell className="py-4">
+                            <div className="text-sm text-gray-700">
+                              {item.last_restocked ? format(new Date(item.last_restocked), "MMM dd, yyyy") : "Never"}
+                            </div>
+                          </TableCell>
+                          <TableCell className="py-4">
+                            <div className="flex items-center space-x-1">
+                              <Button variant="ghost" size="sm" className="text-gray-600 hover:bg-blue-50 hover:text-blue-700">
+                                <Eye className="w-4 h-4" />
+                              </Button>
+                              <Button variant="ghost" size="sm" className="text-gray-600 hover:bg-blue-50 hover:text-blue-700">
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                              <Button variant="ghost" size="sm" className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50">
+                                <Plus className="w-4 h-4" />
+                              </Button>
+                              <Button variant="ghost" size="sm" className="text-gray-600 hover:bg-gray-50">
+                                <MoreHorizontal className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+
+              {/* Empty State */}
+              {!loading && !error && inventory.length === 0 && (
                 <div className="text-center py-12 px-4">
                   <Warehouse className="w-16 h-16 text-gray-400 mx-auto mb-4" />
                   <h3 className="text-lg font-semibold text-gray-900 mb-2">No inventory items found</h3>
-                  <p className="text-gray-600">Try adjusting your search or filter criteria</p>
+                  <p className="text-gray-600 mb-4">Try adjusting your search or filter criteria</p>
+                  <Button variant="outline" onClick={() => setFilters({
+                    search: "",
+                    status: undefined,
+                    movement_trend: undefined,
+                    sort_by: "product_name",
+                    sort_order: "asc",
+                    page: 1,
+                    limit: 20,
+                  })}>
+                    Clear Filters
+                  </Button>
                 </div>
               )}
             </CardContent>
@@ -402,45 +522,101 @@ export default function InventoryPage() {
               <CardTitle className="text-lg font-semibold text-gray-900">Quick Actions</CardTitle>
             </CardHeader>
             <CardContent className="p-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Button variant="outline" className="justify-start h-auto p-4 bg-white hover:bg-red-50 hover:text-red-700 border-gray-300">
-                  <div className="flex items-center space-x-3">
-                    <div className="p-2 bg-red-100 rounded-lg">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <Button variant="outline" className="justify-start h-auto p-4 bg-white hover:bg-red-50 hover:text-red-700 border-gray-300 min-h-[90px] w-full">
+                  <div className="flex items-start space-x-3 w-full">
+                    <div className="p-2 bg-red-100 rounded-lg flex-shrink-0">
                       <AlertTriangle className="w-5 h-5 text-red-600" />
                     </div>
-                    <div className="text-left">
-                      <div className="font-semibold text-gray-900">Reorder Low Stock</div>
-                      <div className="text-sm text-gray-600">{lowStockItems} items need attention</div>
+                    <div className="text-left flex-1 overflow-hidden">
+                      <div className="font-semibold text-gray-900 text-sm leading-tight mb-1">Reorder Low Stock</div>
+                      <div className="text-xs text-gray-600 leading-relaxed break-words">
+                        {stats?.low_stock_items || lowStockItems?.length || 0} items need attention
+                      </div>
                     </div>
                   </div>
                 </Button>
                 
-                <Button variant="outline" className="justify-start h-auto p-4 bg-white hover:bg-blue-50 hover:text-blue-700 border-gray-300">
-                  <div className="flex items-center space-x-3">
-                    <div className="p-2 bg-blue-100 rounded-lg">
+                <Button variant="outline" className="justify-start h-auto p-4 bg-white hover:bg-blue-50 hover:text-blue-700 border-gray-300 min-h-[90px] w-full">
+                  <div className="flex items-start space-x-3 w-full">
+                    <div className="p-2 bg-blue-100 rounded-lg flex-shrink-0">
                       <RefreshCw className="w-5 h-5 text-blue-600" />
                     </div>
-                    <div className="text-left">
-                      <div className="font-semibold text-gray-900">Bulk Stock Update</div>
-                      <div className="text-sm text-gray-600">Update multiple items at once</div>
+                    <div className="text-left flex-1 overflow-hidden">
+                      <div className="font-semibold text-gray-900 text-sm leading-tight mb-1">Bulk Stock Update</div>
+                      <div className="text-xs text-gray-600 leading-relaxed break-words">
+                        Update multiple items at once
+                      </div>
                     </div>
                   </div>
                 </Button>
                 
-                <Button variant="outline" className="justify-start h-auto p-4 bg-white hover:bg-emerald-50 hover:text-emerald-700 border-gray-300">
-                  <div className="flex items-center space-x-3">
-                    <div className="p-2 bg-emerald-100 rounded-lg">
+                <Button variant="outline" className="justify-start h-auto p-4 bg-white hover:bg-emerald-50 hover:text-emerald-700 border-gray-300 min-h-[90px] w-full">
+                  <div className="flex items-start space-x-3 w-full">
+                    <div className="p-2 bg-emerald-100 rounded-lg flex-shrink-0">
                       <Download className="w-5 h-5 text-emerald-600" />
                     </div>
-                    <div className="text-left">
-                      <div className="font-semibold text-gray-900">Generate Report</div>
-                      <div className="text-sm text-gray-600">Export inventory data</div>
+                    <div className="text-left flex-1 overflow-hidden">
+                      <div className="font-semibold text-gray-900 text-sm leading-tight mb-1">Generate Report</div>
+                      <div className="text-xs text-gray-600 leading-relaxed break-words">
+                        Export inventory data
+                      </div>
+                    </div>
+                  </div>
+                </Button>
+
+                <Button variant="outline" className="justify-start h-auto p-4 bg-white hover:bg-purple-50 hover:text-purple-700 border-gray-300 min-h-[90px] w-full">
+                  <div className="flex items-start space-x-3 w-full">
+                    <div className="p-2 bg-purple-100 rounded-lg flex-shrink-0">
+                      <Settings className="w-5 h-5 text-purple-600" />
+                    </div>
+                    <div className="text-left flex-1 overflow-hidden">
+                      <div className="font-semibold text-gray-900 text-sm leading-tight mb-1">Stock Settings</div>
+                      <div className="text-xs text-gray-600 leading-relaxed break-words">
+                        Configure alerts & thresholds
+                      </div>
                     </div>
                   </div>
                 </Button>
               </div>
             </CardContent>
           </Card>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <Card className="bg-white border-0 shadow-lg">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-gray-600">
+                    Showing {((currentPage - 1) * (filters.limit || 20)) + 1} to {Math.min(currentPage * (filters.limit || 20), totalItems)} of {totalItems} items
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePageChange(currentPage - 1)}
+                      disabled={currentPage <= 1}
+                      className="bg-white border-gray-300"
+                    >
+                      Previous
+                    </Button>
+                    <span className="text-sm text-gray-600">
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePageChange(currentPage + 1)}
+                      disabled={currentPage >= totalPages}
+                      className="bg-white border-gray-300"
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </div>

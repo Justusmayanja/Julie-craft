@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/client'
-import { Product, CreateProductData, UpdateProductData, ProductFilters, ProductStats, Category } from '@/lib/types/product'
+import { Product, CreateProductData, ProductFilters, ProductStats, Category } from '@/lib/types/product'
 import { productFiltersSchema } from '@/lib/validations/product'
 
 export class ProductService {

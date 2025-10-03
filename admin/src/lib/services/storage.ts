@@ -15,7 +15,7 @@ export class StorageService {
       const filePath = `products/${fileName}`
 
       // Upload file to Supabase Storage
-      const { data, error } = await supabase.storage
+      const { error } = await supabase.storage
         .from('products')
         .upload(filePath, file, {
           cacheControl: '3600',
@@ -70,7 +70,7 @@ export class StorageService {
       const filePath = `categories/${fileName}`
 
       // Upload file to Supabase Storage
-      const { data, error } = await supabase.storage
+      const { error } = await supabase.storage
         .from('media')
         .upload(filePath, file, {
           cacheControl: '3600',
@@ -125,7 +125,7 @@ export class StorageService {
       const filePath = `avatars/${fileName}`
 
       // Upload file to Supabase Storage
-      const { data, error } = await supabase.storage
+      const { error } = await supabase.storage
         .from('avatars')
         .upload(filePath, file, {
           cacheControl: '3600',

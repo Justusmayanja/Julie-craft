@@ -370,7 +370,7 @@ export default function CategoriesPage() {
                         const stats = getCategoryStats(category.id)
                         return (
                           <TableRow key={category.id} className="hover:bg-gray-50/50 transition-colors">
-                            <TableCell className="py-4">
+                        <TableCell className="py-4">
                               <div className="font-semibold text-gray-900">{category.name}</div>
                               {category.tags && category.tags.length > 0 && (
                                 <div className="flex flex-wrap gap-1 mt-1">
@@ -384,13 +384,13 @@ export default function CategoriesPage() {
                                       +{category.tags.length - 2}
                                     </Badge>
                                   )}
-                                </div>
+                          </div>
                               )}
                             </TableCell>
                             <TableCell className="py-4 text-gray-700">
                               {category.description || '-'}
-                            </TableCell>
-                            <TableCell className="py-4">
+                        </TableCell>
+                        <TableCell className="py-4">
                               {stats ? (
                                 <div className="space-y-1">
                                   <div className="flex items-center space-x-2">
@@ -416,33 +416,33 @@ export default function CategoriesPage() {
                               ) : (
                                 <span className="text-gray-400">-</span>
                               )}
-                            </TableCell>
-                            <TableCell className="py-4">
-                              <Badge 
+                        </TableCell>
+                        <TableCell className="py-4">
+                          <Badge 
                                 className={category.is_active 
                                   ? 'bg-emerald-100 text-emerald-700 border-emerald-200' 
                                   : 'bg-gray-100 text-gray-700 border-gray-200'
                                 }
                               >
                                 {category.is_active ? 'Active' : 'Inactive'}
-                              </Badge>
-                            </TableCell>
+                          </Badge>
+                        </TableCell>
                             <TableCell className="py-4 text-gray-700">
                               {category.sort_order ?? 0}
                             </TableCell>
                             <TableCell className="py-4 text-gray-700">
                               {new Date(category.created_at).toLocaleDateString()}
-                            </TableCell>
-                            <TableCell className="py-4">
-                              <div className="flex items-center space-x-1">
+                        </TableCell>
+                        <TableCell className="py-4">
+                        <div className="flex items-center space-x-1">
                                 <Button 
                                   variant="ghost" 
                                   size="sm" 
                                   onClick={() => handleEditCategory(category)}
                                   className="text-gray-600 hover:bg-blue-50 hover:text-blue-700"
                                 >
-                                  <Edit className="w-4 h-4" />
-                                </Button>
+                            <Edit className="w-4 h-4" />
+                          </Button>
                                 <Button 
                                   variant="ghost" 
                                   size="sm" 
@@ -460,11 +460,11 @@ export default function CategoriesPage() {
                                   onClick={() => handleDeleteCategory(category)}
                                   className="text-red-600 hover:text-red-700 hover:bg-red-50"
                                 >
-                                  <Trash2 className="w-4 h-4" />
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                        </TableCell>
+                      </TableRow>
                         )
                       })
                     )}

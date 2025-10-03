@@ -23,9 +23,11 @@ import {
   RefreshCw,
   AlertTriangle,
   CheckCircle,
-  XCircle
+  XCircle,
+  TrendingUp
 } from "lucide-react"
 import { useCategories } from "@/hooks/use-products"
+import { useCategoryStats } from "@/hooks/use-category-stats"
 import { useToast } from "@/components/ui/toast"
 
 interface Category {
@@ -47,6 +49,7 @@ export default function CategoriesPage() {
   const [showModal, setShowModal] = useState(false)
 
   const { categories, loading, error, refetch } = useCategories()
+  const { stats: categoryStats, loading: statsLoading, error: statsError, refresh: refreshStats } = useCategoryStats()
   const { addToast } = useToast()
 
   // Filter categories based on search
@@ -54,6 +57,11 @@ export default function CategoriesPage() {
     category.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (category.description && category.description.toLowerCase().includes(searchTerm.toLowerCase()))
   )
+
+  // Get category stats for display
+  const getCategoryStats = (categoryId: string) => {
+    return categoryStats?.categories.find(c => c.id === categoryId)
+  }
 
   const handleCreateCategory = () => {
     setEditingCategory(null)
@@ -88,6 +96,7 @@ export default function CategoriesPage() {
       })
       
       await refetch()
+      await refreshStats()
     } catch (error) {
       console.error('Error deleting category:', error)
       addToast({
@@ -121,6 +130,7 @@ export default function CategoriesPage() {
       })
       
       await refetch()
+      await refreshStats()
     } catch (error) {
       console.error('Error updating category status:', error)
       addToast({
@@ -177,6 +187,7 @@ export default function CategoriesPage() {
       setEditingCategory(null)
       setIsCreating(false)
       await refetch()
+      await refreshStats()
     } catch (error) {
       console.error('Error saving category:', error)
       addToast({
@@ -201,11 +212,14 @@ export default function CategoriesPage() {
               <Button 
                 variant="outline" 
                 size="sm" 
-                onClick={() => refetch()}
-                disabled={loading}
+                onClick={() => {
+                  refetch()
+                  refreshStats()
+                }}
+                disabled={loading || statsLoading}
                 className="bg-white hover:bg-gray-50 border-gray-300"
               >
-                <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`w-4 h-4 mr-2 ${(loading || statsLoading) ? 'animate-spin' : ''}`} />
                 Refresh
               </Button>
               <Button 
@@ -219,7 +233,7 @@ export default function CategoriesPage() {
           </div>
 
           {/* Stats Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <Card className="relative overflow-hidden bg-white border-0 shadow-md hover:shadow-lg transition-all duration-300 group">
               <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-blue-600/10"></div>
               <CardContent className="p-4">
@@ -231,7 +245,7 @@ export default function CategoriesPage() {
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-gray-600">Total Categories</p>
                   <p className="text-xl font-bold text-gray-900">
-                    {loading ? '...' : categories.length}
+                    {statsLoading ? '...' : categoryStats?.summary.total_categories || 0}
                   </p>
                   <p className="text-xs text-gray-500">All categories</p>
                 </div>
@@ -249,7 +263,7 @@ export default function CategoriesPage() {
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-gray-600">Active Categories</p>
                   <p className="text-xl font-bold text-gray-900">
-                    {loading ? '...' : categories.filter(c => c.is_active).length}
+                    {statsLoading ? '...' : categoryStats?.summary.active_categories || 0}
                   </p>
                   <p className="text-xs text-gray-500">Currently active</p>
                 </div>
@@ -257,19 +271,37 @@ export default function CategoriesPage() {
             </Card>
 
             <Card className="relative overflow-hidden bg-white border-0 shadow-md hover:shadow-lg transition-all duration-300 group">
-              <div className="absolute inset-0 bg-gradient-to-br from-red-500/5 to-red-600/10"></div>
+              <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-purple-600/10"></div>
               <CardContent className="p-4">
                 <div className="flex items-center justify-between mb-3">
-                  <div className="p-1.5 bg-red-100 rounded-lg group-hover:bg-red-200 transition-colors">
-                    <XCircle className="h-4 w-4 text-red-600" />
+                  <div className="p-1.5 bg-purple-100 rounded-lg group-hover:bg-purple-200 transition-colors">
+                    <Package className="h-4 w-4 text-purple-600" />
                   </div>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-xs font-medium text-gray-600">Inactive Categories</p>
+                  <p className="text-xs font-medium text-gray-600">Total Products</p>
                   <p className="text-xl font-bold text-gray-900">
-                    {loading ? '...' : categories.filter(c => !c.is_active).length}
+                    {statsLoading ? '...' : categoryStats?.summary.total_products || 0}
                   </p>
-                  <p className="text-xs text-gray-500">Currently inactive</p>
+                  <p className="text-xs text-gray-500">Across all categories</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="relative overflow-hidden bg-white border-0 shadow-md hover:shadow-lg transition-all duration-300 group">
+              <div className="absolute inset-0 bg-gradient-to-br from-orange-500/5 to-orange-600/10"></div>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="p-1.5 bg-orange-100 rounded-lg group-hover:bg-orange-200 transition-colors">
+                    <TrendingUp className="h-4 w-4 text-orange-600" />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-gray-600">Inventory Value</p>
+                  <p className="text-xl font-bold text-gray-900">
+                    {statsLoading ? '...' : `${(categoryStats?.summary.total_inventory_value || 0).toLocaleString()} UGX`}
+                  </p>
+                  <p className="text-xs text-gray-500">Total stock value</p>
                 </div>
               </CardContent>
             </Card>
@@ -299,6 +331,7 @@ export default function CategoriesPage() {
                     <TableRow className="bg-gray-50/50">
                       <TableHead className="font-semibold text-gray-700">Name</TableHead>
                       <TableHead className="font-semibold text-gray-700">Description</TableHead>
+                      <TableHead className="font-semibold text-gray-700">Products</TableHead>
                       <TableHead className="font-semibold text-gray-700">Status</TableHead>
                       <TableHead className="font-semibold text-gray-700">Sort Order</TableHead>
                       <TableHead className="font-semibold text-gray-700">Created</TableHead>
@@ -308,7 +341,7 @@ export default function CategoriesPage() {
                   <TableBody>
                     {loading ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center py-8">
+                        <TableCell colSpan={7} className="text-center py-8">
                           <div className="flex items-center justify-center space-x-2">
                             <RefreshCw className="w-4 h-4 animate-spin" />
                             <span>Loading categories...</span>
@@ -317,7 +350,7 @@ export default function CategoriesPage() {
                       </TableRow>
                     ) : error ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center py-8">
+                        <TableCell colSpan={7} className="text-center py-8">
                           <div className="text-red-600">
                             <AlertTriangle className="w-8 h-8 mx-auto mb-2" />
                             <p>Error loading categories: {error}</p>
@@ -326,84 +359,114 @@ export default function CategoriesPage() {
                       </TableRow>
                     ) : filteredCategories.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center py-8">
+                        <TableCell colSpan={7} className="text-center py-8">
                           <Package className="w-16 h-16 text-gray-400 mx-auto mb-4" />
                           <h3 className="text-lg font-semibold text-gray-900 mb-2">No categories found</h3>
                           <p className="text-gray-600">Try adjusting your search criteria</p>
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredCategories.map((category) => (
-                        <TableRow key={category.id} className="hover:bg-gray-50/50 transition-colors">
-                        <TableCell className="py-4">
-                            <div className="font-semibold text-gray-900">{category.name}</div>
-                            {category.tags && category.tags.length > 0 && (
-                              <div className="flex flex-wrap gap-1 mt-1">
-                                {category.tags.slice(0, 2).map((tag, index) => (
-                                  <Badge key={index} variant="outline" className="text-xs">
-                                    {tag}
-                                  </Badge>
-                                ))}
-                                {category.tags.length > 2 && (
-                                  <Badge variant="outline" className="text-xs">
-                                    +{category.tags.length - 2}
-                                  </Badge>
-                                )}
-                              </div>
-                            )}
-                          </TableCell>
-                          <TableCell className="py-4 text-gray-700">
-                            {category.description || '-'}
-                        </TableCell>
-                        <TableCell className="py-4">
-                          <Badge 
-                              className={category.is_active 
-                                ? 'bg-emerald-100 text-emerald-700 border-emerald-200' 
-                                : 'bg-gray-100 text-gray-700 border-gray-200'
-                              }
-                            >
-                              {category.is_active ? 'Active' : 'Inactive'}
-                          </Badge>
-                        </TableCell>
-                          <TableCell className="py-4 text-gray-700">
-                            {category.sort_order ?? 0}
-                          </TableCell>
-                          <TableCell className="py-4 text-gray-700">
-                            {new Date(category.created_at).toLocaleDateString()}
-                        </TableCell>
-                        <TableCell className="py-4">
-                        <div className="flex items-center space-x-1">
-                              <Button 
-                                variant="ghost" 
-                                size="sm" 
-                                onClick={() => handleEditCategory(category)}
-                                className="text-gray-600 hover:bg-blue-50 hover:text-blue-700"
-                              >
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                              <Button 
-                                variant="ghost" 
-                                size="sm" 
-                                onClick={() => handleToggleStatus(category)}
+                      filteredCategories.map((category) => {
+                        const stats = getCategoryStats(category.id)
+                        return (
+                          <TableRow key={category.id} className="hover:bg-gray-50/50 transition-colors">
+                            <TableCell className="py-4">
+                              <div className="font-semibold text-gray-900">{category.name}</div>
+                              {category.tags && category.tags.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {category.tags.slice(0, 2).map((tag, index) => (
+                                    <Badge key={index} variant="outline" className="text-xs">
+                                      {tag}
+                                    </Badge>
+                                  ))}
+                                  {category.tags.length > 2 && (
+                                    <Badge variant="outline" className="text-xs">
+                                      +{category.tags.length - 2}
+                                    </Badge>
+                                  )}
+                                </div>
+                              )}
+                            </TableCell>
+                            <TableCell className="py-4 text-gray-700">
+                              {category.description || '-'}
+                            </TableCell>
+                            <TableCell className="py-4">
+                              {stats ? (
+                                <div className="space-y-1">
+                                  <div className="flex items-center space-x-2">
+                                    <span className="font-semibold text-gray-900">{stats.total_products}</span>
+                                    <span className="text-xs text-gray-500">products</span>
+                                  </div>
+                                  <div className="flex space-x-1">
+                                    <Badge variant="outline" className="text-xs bg-emerald-50 text-emerald-700 border-emerald-200">
+                                      {stats.active_products} active
+                                    </Badge>
+                                    {stats.low_stock_products > 0 && (
+                                      <Badge variant="outline" className="text-xs bg-red-50 text-red-700 border-red-200">
+                                        {stats.low_stock_products} low stock
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  {stats.total_inventory_value > 0 && (
+                                    <div className="text-xs text-gray-500">
+                                      {stats.total_inventory_value.toLocaleString()} UGX
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="py-4">
+                              <Badge 
                                 className={category.is_active 
-                                  ? "text-red-600 hover:text-red-700 hover:bg-red-50" 
-                                  : "text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                                  ? 'bg-emerald-100 text-emerald-700 border-emerald-200' 
+                                  : 'bg-gray-100 text-gray-700 border-gray-200'
                                 }
                               >
-                                {category.is_active ? <XCircle className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
-                              </Button>
-                              <Button 
-                                variant="ghost" 
-                                size="sm" 
-                                onClick={() => handleDeleteCategory(category)}
-                                className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                              >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                        </TableCell>
-                      </TableRow>
-                      ))
+                                {category.is_active ? 'Active' : 'Inactive'}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="py-4 text-gray-700">
+                              {category.sort_order ?? 0}
+                            </TableCell>
+                            <TableCell className="py-4 text-gray-700">
+                              {new Date(category.created_at).toLocaleDateString()}
+                            </TableCell>
+                            <TableCell className="py-4">
+                              <div className="flex items-center space-x-1">
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  onClick={() => handleEditCategory(category)}
+                                  className="text-gray-600 hover:bg-blue-50 hover:text-blue-700"
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </Button>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  onClick={() => handleToggleStatus(category)}
+                                  className={category.is_active 
+                                    ? "text-red-600 hover:text-red-700 hover:bg-red-50" 
+                                    : "text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                                  }
+                                >
+                                  {category.is_active ? <XCircle className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
+                                </Button>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  onClick={() => handleDeleteCategory(category)}
+                                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })
                     )}
                   </TableBody>
                 </Table>

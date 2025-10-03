@@ -1,8 +1,8 @@
 # Vercel Deployment Guide
 
-## 🚀 Monorepo Deployment - Correct Approach
+## 🚀 Independent Projects Deployment
 
-This guide shows you how to properly deploy your monorepo projects on Vercel by selecting the specific project in the Vercel dashboard.
+This guide shows you how to deploy your two independent Next.js projects on Vercel. Each project is completely independent and only shares the same database.
 
 ## 📋 Two Deployment Options
 
@@ -86,31 +86,35 @@ Each project has its own `vercel.json` configuration:
    git push
    ```
 
-## 📊 Available Scripts
+## 📊 Development Commands
 
+Since each project is independent, you work with them separately:
+
+### Admin Project:
 ```bash
-# Development
-npm run dev:user-site     # Run user-site locally
-npm run dev:admin         # Run admin locally
+cd admin
+npm install          # Install dependencies
+npm run dev          # Start development server
+npm run build        # Build for production
+```
 
-# Building
-npm run build:all         # Build both projects
-npm run build:user-site   # Build user-site only
-npm run build:admin       # Build admin only
-
-# Installation
-npm run install:all       # Install dependencies for both
-npm run install:admin     # Install admin dependencies
-npm run install:user-site # Install user-site dependencies
+### User-Site Project:
+```bash
+cd user-site
+npm install          # Install dependencies
+npm run dev          # Start development server
+npm run build        # Build for production
 ```
 
 ## ✅ Benefits of This Approach
 
-- **Clear separation**: Each project has its own deployment
+- **Complete independence**: Each project is self-contained
+- **Simple deployment**: No complex monorepo configuration needed
 - **Independent scaling**: Scale each app separately
 - **Easy management**: Manage each project independently
 - **No routing conflicts**: Each app has its own domain/subdomain
-- **Vercel best practices**: Follows Vercel's recommended monorepo approach
+- **Clean structure**: No unnecessary root-level files
+- **Shared database**: Both projects can connect to the same Supabase database
 
 ## 🔍 Troubleshooting
 

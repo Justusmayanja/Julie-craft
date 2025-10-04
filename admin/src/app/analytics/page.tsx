@@ -3,7 +3,6 @@
 import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { 
   BarChart3,
   TrendingUp,
@@ -12,53 +11,18 @@ import {
   ShoppingCart,
   Users,
   Package,
-  Calendar,
   Download,
   RefreshCw,
-  Eye,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  Loader2
 } from "lucide-react"
-
-// Mock data - replace with real data from your database (UGX - Ugandan Shilling)
-const salesData = [
-  { month: "Jan", revenue: 17550000, orders: 45, customers: 32 },
-  { month: "Feb", revenue: 20280000, orders: 52, customers: 38 },
-  { month: "Mar", revenue: 18720000, orders: 48, customers: 35 },
-  { month: "Apr", revenue: 23790000, orders: 61, customers: 42 },
-  { month: "May", revenue: 28470000, orders: 73, customers: 48 },
-  { month: "Jun", revenue: 34710000, orders: 89, customers: 56 },
-]
-
-const topProducts = [
-  { name: "Ceramic Bowl Set", sales: 145, revenue: 50750000, growth: 12.5 },
-  { name: "Silver Wire Bracelet", sales: 98, revenue: 25970000, growth: 8.3 },
-  { name: "Wool Throw Blanket", sales: 67, revenue: 40870000, growth: -2.1 },
-  { name: "Copper Earrings", sales: 89, revenue: 10235000, growth: 15.7 },
-  { name: "Blue Glazed Vase", sales: 34, revenue: 16320000, growth: -5.2 },
-]
-
-const categoryPerformance = [
-  { name: "Pottery", revenue: 72150000, percentage: 35, growth: 8.2 },
-  { name: "Jewelry", revenue: 59280000, percentage: 29, growth: 12.1 },
-  { name: "Textiles", revenue: 49920000, percentage: 24, growth: -1.5 },
-  { name: "Woodwork", revenue: 24570000, percentage: 12, growth: 5.8 },
-]
-
-const recentMetrics = {
-  totalRevenue: 205920000,
-  revenueGrowth: 15.2,
-  totalOrders: 324,
-  ordersGrowth: 8.7,
-  totalCustomers: 156,
-  customersGrowth: 12.3,
-  avgOrderValue: 635400,
-  aovGrowth: 6.1,
-  conversionRate: 3.2,
-  conversionGrowth: 0.5,
-  returnRate: 2.1,
-  returnGrowth: -0.3,
-}
+import { useAnalytics } from "@/hooks/use-analytics"
+import { RevenueChart } from "@/components/charts/revenue-chart"
+import { CategoryPieChart } from "@/components/charts/category-pie-chart"
+import { OrdersChart } from "@/components/charts/orders-chart"
+import { TopProductsChart } from "@/components/charts/top-products-chart"
+import { MetricsComparisonChart } from "@/components/charts/metrics-comparison-chart"
 
 export default function AnalyticsPage() {
   const [timeRange, setTimeRange] = useState("6months")
@@ -70,6 +34,53 @@ export default function AnalyticsPage() {
     { value: "6months", label: "Last 6 Months" },
     { value: "1year", label: "Last Year" },
   ]
+
+  const { data: analyticsData, loading, error, refresh } = useAnalytics({
+    timeRange,
+    autoRefresh: true,
+    refreshInterval: 300000 // 5 minutes
+  })
+
+  if (loading && !analyticsData) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
+          <p className="text-gray-600">Loading analytics data...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-red-600 mb-4">
+            <TrendingDown className="w-8 h-8 mx-auto mb-2" />
+            <p className="font-semibold">Failed to load analytics</p>
+            <p className="text-sm text-gray-600">{error}</p>
+          </div>
+          <Button onClick={refresh} variant="outline">
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Try Again
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  if (!analyticsData) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-gray-600">No analytics data available</p>
+        </div>
+      </div>
+    )
+  }
+
+  const { metrics, topProducts, categoryPerformance, salesTrend } = analyticsData
 
   return (
     <div className="h-full">
@@ -96,8 +107,14 @@ export default function AnalyticsPage() {
                 ))}
               </div>
               <div className="flex gap-2 lg:ml-auto">
-                <Button variant="outline" size="sm" className="bg-white hover:bg-gray-50 border-gray-300">
-                  <RefreshCw className="w-4 h-4 mr-2" />
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="bg-white hover:bg-gray-50 border-gray-300"
+                  onClick={refresh}
+                  disabled={loading}
+                >
+                  <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
                   Refresh
                 </Button>
                 <Button variant="outline" size="sm" className="bg-white hover:bg-gray-50 border-gray-300">
@@ -119,13 +136,13 @@ export default function AnalyticsPage() {
                   </div>
                   <div className="flex items-center text-xs font-medium text-green-600 bg-green-50 px-1.5 py-0.5 rounded-full">
                     <ArrowUp className="h-2.5 w-2.5 mr-1" />
-                    +{recentMetrics.revenueGrowth}%
+                    +{metrics.revenueGrowth.toFixed(1)}%
                   </div>
                 </div>
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-gray-600">Total Revenue</p>
-                  <p className="text-xl font-bold text-gray-900">{recentMetrics.totalRevenue.toLocaleString()} UGX</p>
-                  <p className="text-xs text-gray-500">+{(recentMetrics.totalRevenue * recentMetrics.revenueGrowth / 100).toLocaleString()} UGX from last period</p>
+                  <p className="text-xl font-bold text-gray-900">{metrics.totalRevenue.toLocaleString()} UGX</p>
+                  <p className="text-xs text-gray-500">+{(metrics.totalRevenue * metrics.revenueGrowth / 100).toLocaleString()} UGX from last period</p>
                 </div>
               </CardContent>
             </Card>
@@ -139,13 +156,13 @@ export default function AnalyticsPage() {
                   </div>
                   <div className="flex items-center text-xs font-medium text-green-600 bg-green-50 px-1.5 py-0.5 rounded-full">
                     <ArrowUp className="h-2.5 w-2.5 mr-1" />
-                    +{recentMetrics.ordersGrowth}%
+                    +{metrics.ordersGrowth.toFixed(1)}%
                   </div>
                 </div>
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-gray-600">Total Orders</p>
-                  <p className="text-xl font-bold text-gray-900">{recentMetrics.totalOrders}</p>
-                  <p className="text-xs text-gray-500">+{Math.round(recentMetrics.totalOrders * recentMetrics.ordersGrowth / 100)} new orders this period</p>
+                  <p className="text-xl font-bold text-gray-900">{metrics.totalOrders}</p>
+                  <p className="text-xs text-gray-500">+{Math.round(metrics.totalOrders * metrics.ordersGrowth / 100)} new orders this period</p>
                 </div>
               </CardContent>
             </Card>
@@ -159,13 +176,13 @@ export default function AnalyticsPage() {
                   </div>
                   <div className="flex items-center text-xs font-medium text-green-600 bg-green-50 px-1.5 py-0.5 rounded-full">
                     <ArrowUp className="h-2.5 w-2.5 mr-1" />
-                    +{recentMetrics.customersGrowth}%
+                    +{metrics.customersGrowth.toFixed(1)}%
                   </div>
                 </div>
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-gray-600">New Customers</p>
-                  <p className="text-xl font-bold text-gray-900">{recentMetrics.totalCustomers}</p>
-                  <p className="text-xs text-gray-500">+{Math.round(recentMetrics.totalCustomers * recentMetrics.customersGrowth / 100)} new customers this period</p>
+                  <p className="text-xl font-bold text-gray-900">{metrics.totalCustomers}</p>
+                  <p className="text-xs text-gray-500">+{Math.round(metrics.totalCustomers * metrics.customersGrowth / 100)} new customers this period</p>
                 </div>
               </CardContent>
             </Card>
@@ -179,13 +196,13 @@ export default function AnalyticsPage() {
                   </div>
                   <div className="flex items-center text-xs font-medium text-green-600 bg-green-50 px-1.5 py-0.5 rounded-full">
                     <ArrowUp className="h-2.5 w-2.5 mr-1" />
-                    +{recentMetrics.aovGrowth}%
+                    +{metrics.aovGrowth.toFixed(1)}%
                   </div>
                 </div>
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-gray-600">Avg Order Value</p>
-                  <p className="text-xl font-bold text-gray-900">{recentMetrics.avgOrderValue.toLocaleString()} UGX</p>
-                  <p className="text-xs text-gray-500">+{(recentMetrics.avgOrderValue * recentMetrics.aovGrowth / 100).toLocaleString()} UGX from last period</p>
+                  <p className="text-xl font-bold text-gray-900">{metrics.avgOrderValue.toLocaleString()} UGX</p>
+                  <p className="text-xs text-gray-500">+{(metrics.avgOrderValue * metrics.aovGrowth / 100).toLocaleString()} UGX from last period</p>
                 </div>
               </CardContent>
             </Card>
@@ -193,40 +210,22 @@ export default function AnalyticsPage() {
 
           {/* Charts Section */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Sales Trend */}
+            {/* Revenue Trend Chart */}
             <Card className="bg-white border-0 shadow-lg">
               <CardHeader className="border-b border-gray-100 pb-4">
                 <CardTitle className="flex items-center space-x-2 text-lg font-semibold text-gray-900">
                   <div className="p-1.5 bg-blue-100 rounded-lg">
                     <TrendingUp className="w-4 h-4 text-blue-600" />
                   </div>
-                  <span>Sales Trend</span>
+                  <span>Revenue Trend</span>
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-4">
-                <div className="space-y-3">
-                  {salesData.map((data, index) => (
-                    <div key={data.month} className="flex items-center justify-between p-4 bg-gray-50/50 rounded-lg hover:bg-blue-50/50 transition-colors">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-emerald-500 rounded-lg flex items-center justify-center text-white text-sm font-medium shadow-sm">
-                          {data.month.charAt(0)}
-                        </div>
-                        <div>
-                          <div className="font-medium text-gray-900">{data.month}</div>
-                          <div className="text-sm text-gray-500">{data.orders} orders</div>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-semibold text-gray-900">{data.revenue.toLocaleString()} UGX</div>
-                        <div className="text-sm text-gray-500">{data.customers} customers</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <RevenueChart data={salesTrend} height={300} />
               </CardContent>
             </Card>
 
-            {/* Category Performance */}
+            {/* Category Performance Pie Chart */}
             <Card className="bg-white border-0 shadow-lg">
               <CardHeader className="border-b border-gray-100 pb-4">
                 <CardTitle className="flex items-center space-x-2 text-lg font-semibold text-gray-900">
@@ -237,78 +236,62 @@ export default function AnalyticsPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-4">
-                <div className="space-y-4">
-                  {categoryPerformance.map((category) => (
-                    <div key={category.name} className="p-4 bg-gray-50/50 rounded-lg hover:bg-blue-50/30 transition-colors">
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="font-semibold text-gray-900">{category.name}</div>
-                        <div className="flex items-center space-x-2">
-                          <span className="text-sm font-semibold text-gray-900">{category.revenue.toLocaleString()} UGX</span>
-                          <div className="flex items-center">
-                            {category.growth > 0 ? (
-                              <ArrowUp className="w-3 h-3 text-green-500" />
-                            ) : (
-                              <ArrowDown className="w-3 h-3 text-red-500" />
-                            )}
-                            <span className={`text-xs font-medium ${category.growth > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                              {Math.abs(category.growth)}%
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2.5 mb-2">
-                        <div 
-                          className="bg-gradient-to-r from-blue-500 to-emerald-500 h-2.5 rounded-full shadow-sm"
-                          style={{ width: `${category.percentage}%` }}
-                        ></div>
-                      </div>
-                      <div className="text-xs text-gray-600 font-medium">{category.percentage}% of total revenue</div>
-                    </div>
-                  ))}
-                </div>
+                <CategoryPieChart data={categoryPerformance} height={300} />
               </CardContent>
             </Card>
           </div>
 
-          {/* Additional Metrics */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Top Products */}
+          {/* Additional Charts Section */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Orders & Customers Chart */}
             <Card className="bg-white border-0 shadow-lg">
               <CardHeader className="border-b border-gray-100 pb-4">
-                <CardTitle className="text-lg font-semibold text-gray-900">Top Selling Products</CardTitle>
+                <CardTitle className="flex items-center space-x-2 text-lg font-semibold text-gray-900">
+                  <div className="p-1.5 bg-emerald-100 rounded-lg">
+                    <BarChart3 className="w-4 h-4 text-emerald-600" />
+                  </div>
+                  <span>Orders & Customers</span>
+                </CardTitle>
               </CardHeader>
               <CardContent className="p-4">
-                <div className="space-y-3">
-                  {topProducts.slice(0, 5).map((product, index) => (
-                    <div key={product.name} className="flex items-center justify-between p-3 bg-gray-50/50 rounded-lg hover:bg-blue-50/30 transition-colors">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-7 h-7 bg-gradient-to-br from-blue-500 to-emerald-500 rounded-lg flex items-center justify-center text-white font-bold text-xs shadow-sm">
-                          #{index + 1}
-                        </div>
-                        <div>
-                          <div className="font-semibold text-gray-900 text-sm">{product.name}</div>
-                          <div className="text-xs text-gray-500">{product.sales} sales</div>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-semibold text-gray-900 text-sm">{product.revenue.toLocaleString()} UGX</div>
-                        <div className="flex items-center">
-                          {product.growth > 0 ? (
-                            <ArrowUp className="w-3 h-3 text-green-500" />
-                          ) : (
-                            <ArrowDown className="w-3 h-3 text-red-500" />
-                          )}
-                          <span className={`text-xs font-medium ${product.growth > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {Math.abs(product.growth)}%
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <OrdersChart data={salesTrend} height={300} />
               </CardContent>
             </Card>
 
+            {/* Top Products Chart */}
+            <Card className="bg-white border-0 shadow-lg">
+              <CardHeader className="border-b border-gray-100 pb-4">
+                <CardTitle className="flex items-center space-x-2 text-lg font-semibold text-gray-900">
+                  <div className="p-1.5 bg-purple-100 rounded-lg">
+                    <Package className="w-4 h-4 text-purple-600" />
+                  </div>
+                  <span>Top Products by Revenue</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-4">
+                <TopProductsChart data={topProducts} height={300} />
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Metrics Comparison Chart */}
+          <Card className="bg-white border-0 shadow-lg">
+            <CardHeader className="border-b border-gray-100 pb-4">
+              <CardTitle className="flex items-center space-x-2 text-lg font-semibold text-gray-900">
+                <div className="p-1.5 bg-blue-100 rounded-lg">
+                  <TrendingUp className="w-4 h-4 text-blue-600" />
+                </div>
+                <span>Performance Comparison</span>
+              </CardTitle>
+              <p className="text-sm text-gray-600 mt-2">Normalized comparison of revenue, orders, and customers over time</p>
+            </CardHeader>
+            <CardContent className="p-4">
+              <MetricsComparisonChart data={salesTrend} height={350} />
+            </CardContent>
+          </Card>
+
+          {/* Performance Metrics */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Performance Metrics */}
             <Card className="bg-white border-0 shadow-lg">
               <CardHeader className="border-b border-gray-100 pb-4">
@@ -322,10 +305,10 @@ export default function AnalyticsPage() {
                       <div className="text-sm text-gray-600">Visitors to customers</div>
                     </div>
                     <div className="text-right">
-                      <div className="font-bold text-gray-900">{recentMetrics.conversionRate}%</div>
+                      <div className="font-bold text-gray-900">{metrics.conversionRate}%</div>
                       <div className="flex items-center">
                         <ArrowUp className="w-3 h-3 text-green-500" />
-                        <span className="text-xs text-green-600 font-medium">+{recentMetrics.conversionGrowth}%</span>
+                        <span className="text-xs text-green-600 font-medium">+{metrics.conversionGrowth}%</span>
                       </div>
                     </div>
                   </div>
@@ -336,10 +319,10 @@ export default function AnalyticsPage() {
                       <div className="text-sm text-gray-600">Customer returns</div>
                     </div>
                     <div className="text-right">
-                      <div className="font-bold text-gray-900">{recentMetrics.returnRate}%</div>
+                      <div className="font-bold text-gray-900">{metrics.returnRate}%</div>
                       <div className="flex items-center">
                         <ArrowDown className="w-3 h-3 text-green-500" />
-                        <span className="text-xs text-green-600 font-medium">{recentMetrics.returnGrowth}%</span>
+                        <span className="text-xs text-green-600 font-medium">{metrics.returnGrowth}%</span>
                       </div>
                     </div>
                   </div>
@@ -387,6 +370,45 @@ export default function AnalyticsPage() {
                     <div className="font-semibold text-gray-900 text-sm">Popular Price Range</div>
                     <div className="text-gray-600 text-sm">195,000-585,000 UGX items sell the most</div>
                   </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Top Products Summary */}
+            <Card className="bg-white border-0 shadow-lg">
+              <CardHeader className="border-b border-gray-100 pb-4">
+                <CardTitle className="text-lg font-semibold text-gray-900">Top Products</CardTitle>
+              </CardHeader>
+              <CardContent className="p-4">
+                <div className="space-y-3">
+                  {topProducts.slice(0, 5).map((product, index) => (
+                    <div key={product.name} className="flex items-center justify-between p-3 bg-gray-50/50 rounded-lg hover:bg-blue-50/30 transition-colors">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-7 h-7 bg-gradient-to-br from-blue-500 to-emerald-500 rounded-lg flex items-center justify-center text-white font-bold text-xs shadow-sm">
+                          #{index + 1}
+                        </div>
+                        <div>
+                          <div className="font-semibold text-gray-900 text-sm">{product.name.length > 25 ? product.name.substring(0, 25) + '...' : product.name}</div>
+                          <div className="text-xs text-gray-500">{product.sales} sales</div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-semibold text-gray-900 text-sm">{(product.revenue / 1000000).toFixed(1)}M</div>
+                        {product.growth !== undefined && (
+                          <div className="flex items-center">
+                            {product.growth > 0 ? (
+                              <ArrowUp className="w-3 h-3 text-green-500" />
+                            ) : (
+                              <ArrowDown className="w-3 h-3 text-red-500" />
+                            )}
+                            <span className={`text-xs font-medium ${product.growth > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              {Math.abs(product.growth).toFixed(1)}%
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </CardContent>
             </Card>

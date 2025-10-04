@@ -39,8 +39,7 @@ import {
   ArrowUpDown,
   Settings
 } from "lucide-react"
-import { useInventory, useInventoryStats, useLowStockItems } from "@/hooks/use-inventory"
-import { InventoryFilters, InventoryItem } from "@/lib/types/inventory"
+import { useProductsInventory, useProductsInventoryStats } from "@/hooks/use-products-inventory"
 import { useToast } from "@/components/ui/toast"
 import { format } from "date-fns"
 
@@ -98,30 +97,41 @@ const getMovementIcon = (movement: string) => {
 }
 
 export default function InventoryPage() {
-  const [filters, setFilters] = useState<InventoryFilters>({
+  const [filters, setFilters] = useState({
     search: "",
     status: undefined,
-    movement_trend: undefined,
+    low_stock: false,
+    out_of_stock: false,
     sort_by: "product_name",
     sort_order: "asc",
     page: 1,
     limit: 20,
   })
 
-  // Real data hooks
-  const { data: inventoryData, loading, error, refetch } = useInventory(filters)
-  const { stats } = useInventoryStats()
-  const { items: lowStockItems } = useLowStockItems()
+  // Use products-based inventory data
+  const { data: inventoryData, loading, error, refresh } = useProductsInventory({
+    filters,
+    autoRefresh: true,
+    refreshInterval: 300000 // 5 minutes
+  })
+
+  const { stats, loading: statsLoading } = useProductsInventoryStats()
   const { addToast } = useToast()
 
   // Computed values
   const inventory = inventoryData?.items || []
-  const totalItems = inventoryData?.total || 0
+  const totalItems = inventoryData?.total || stats.total_items || inventory.length
   const totalPages = inventoryData?.total_pages || 0
   const currentPage = inventoryData?.page || 1
+  
+  // Calculate stats from inventory data if stats API fails
+  const lowStockCount = stats.low_stock_items || inventory.filter(item => item.status === 'low_stock').length
+  const outOfStockCount = stats.out_of_stock_items || inventory.filter(item => item.status === 'out_of_stock').length
+  const totalValue = stats.total_value || inventory.reduce((sum, item) => sum + (item.total_value || 0), 0)
+  const avgStockLevel = stats.avg_stock_level || (totalItems > 0 ? ((totalItems - lowStockCount - outOfStockCount) / totalItems) * 100 : 0)
 
   // Handle filter changes
-  const updateFilter = (key: keyof InventoryFilters, value: string | number | boolean | undefined) => {
+  const updateFilter = (key: string, value: string | number | boolean | undefined) => {
     setFilters(prev => ({
       ...prev,
       [key]: value,
@@ -146,8 +156,8 @@ export default function InventoryPage() {
     const newOrder = currentSort === sortBy && filters.sort_order === "asc" ? "desc" : "asc"
     setFilters(prev => ({
       ...prev,
-      sort_by: sortBy as 'product_name' | 'current_stock' | 'total_value' | 'last_restocked' | 'created_at',
-      sort_order: newOrder as "asc" | "desc"
+      sort_by: sortBy,
+      sort_order: newOrder
     }))
   }
 
@@ -156,7 +166,7 @@ export default function InventoryPage() {
   }
 
   const handleRefresh = () => {
-    refetch()
+    refresh()
     addToast({
       type: 'success',
       title: "Inventory Refreshed",
@@ -199,7 +209,7 @@ export default function InventoryPage() {
                 </div>
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-gray-600">Total Items</p>
-                  <p className="text-xl font-bold text-gray-900">{stats?.total_items || totalItems}</p>
+                  <p className="text-xl font-bold text-gray-900">{totalItems}</p>
                   <p className="text-xs text-gray-500">Inventory items</p>
                 </div>
               </CardContent>
@@ -216,7 +226,7 @@ export default function InventoryPage() {
                 </div>
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-gray-600">Low Stock Alerts</p>
-                  <p className="text-xl font-bold text-gray-900">{stats?.low_stock_items || lowStockItems?.length || 0}</p>
+                  <p className="text-xl font-bold text-gray-900">{lowStockCount}</p>
                   <p className="text-xs text-gray-500">Need restocking</p>
                 </div>
               </CardContent>
@@ -233,7 +243,7 @@ export default function InventoryPage() {
                 </div>
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-gray-600">Total Value</p>
-                  <p className="text-xl font-bold text-gray-900">{stats?.total_value?.toLocaleString() || "0"} UGX</p>
+                  <p className="text-xl font-bold text-gray-900">{totalValue.toLocaleString()} UGX</p>
                   <p className="text-xs text-gray-500">Inventory value</p>
                 </div>
               </CardContent>
@@ -250,7 +260,7 @@ export default function InventoryPage() {
                 </div>
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-gray-600">Avg Stock Level</p>
-                  <p className="text-xl font-bold text-gray-900">{stats?.average_stock_level?.toFixed(1) || "0"}%</p>
+                  <p className="text-xl font-bold text-gray-900">{avgStockLevel.toFixed(1)}%</p>
                   <p className="text-xs text-gray-500">Of maximum capacity</p>
                 </div>
               </CardContent>
@@ -531,7 +541,7 @@ export default function InventoryPage() {
                     <div className="text-left flex-1 overflow-hidden">
                       <div className="font-semibold text-gray-900 text-sm leading-tight mb-1">Reorder Low Stock</div>
                       <div className="text-xs text-gray-600 leading-relaxed break-words">
-                        {stats?.low_stock_items || lowStockItems?.length || 0} items need attention
+                        {lowStockCount} items need attention
                       </div>
                     </div>
                   </div>

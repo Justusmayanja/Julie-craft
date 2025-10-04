@@ -1,3 +1,6 @@
+"use client"
+
+import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { 
   Package, 
@@ -8,42 +11,126 @@ import {
   TrendingDown,
   AlertTriangle,
   Eye,
-  Plus
+  Plus,
+  Loader2
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-
-// JulieCraft Business Data (UGX - Ugandan Shilling)
-const stats = {
-  totalRevenue: 61500000, // ~61.5M UGX
-  revenueChange: 18.5,
-  totalOrders: 187,
-  ordersChange: 12.2,
-  totalProducts: 9, // Actual JulieCraft product count
-  productsChange: 12.5, // Growing product line
-  totalCustomers: 298,
-  customersChange: 22.3,
-}
-
-const recentOrders = [
-  { id: "ORD-001", customer: "Sarah Johnson", product: "Handcrafted Ceramic Bowl Set", amount: 350000, status: "completed" },
-  { id: "ORD-002", customer: "Mike Chen", product: "Silver Wire Bracelet with Natural Stones", amount: 265000, status: "processing" },
-  { id: "ORD-003", customer: "Emily Davis", product: "Wool Throw Blanket - Traditional Pattern", amount: 610000, status: "shipped" },
-  { id: "ORD-004", customer: "Alex Smith", product: "Hand-carved Oak Cutting Board", amount: 270000, status: "pending" },
-]
-
-const lowStockItems = [
-  { name: "Blue Glazed Vase", stock: 3, threshold: 8 },
-  { name: "Wool Throw Blanket", stock: 2, threshold: 6 },
-  { name: "Terracotta Planter", stock: 4, threshold: 15 },
-]
-
-const topProducts = [
-  { name: "Handcrafted Ceramic Bowl Set", sales: 45, revenue: 15750000 },
-  { name: "Silver Wire Bracelet", sales: 32, revenue: 8480000 },
-  { name: "Copper Earrings with Patina", sales: 28, revenue: 3220000 },
-]
+import { useAnalytics } from "@/hooks/use-analytics"
+import { useOrders } from "@/hooks/use-orders"
+import { useProductsAnalytics } from "@/hooks/use-products-analytics"
 
 export default function Dashboard() {
+  const { data: analyticsData, loading: analyticsLoading, error: analyticsError } = useAnalytics({
+    timeRange: '30days',
+    autoRefresh: true,
+    refreshInterval: 300000 // 5 minutes
+  })
+
+  const { data: ordersData, loading: ordersLoading, error: ordersError } = useOrders({
+    limit: 5,
+    sort_by: 'order_date',
+    sort_order: 'desc',
+    autoRefresh: true,
+    refreshInterval: 300000 // 5 minutes
+  })
+
+  const { data: productsAnalytics, loading: productsLoading, error: productsError } = useProductsAnalytics({
+    filters: {
+      time_range: '30days'
+    },
+    autoRefresh: true,
+    refreshInterval: 300000 // 5 minutes
+  })
+
+  // Transform products analytics data for dashboard compatibility
+  const statsData = productsAnalytics ? {
+    overview: {
+      total_products: productsAnalytics.overview.total_products,
+      total_inventory_items: productsAnalytics.overview.total_products,
+      products_with_inventory: productsAnalytics.overview.total_products,
+      products_without_inventory: 0,
+      inventory_without_products: 0,
+      consistency_percentage: 100,
+    },
+    status_breakdown: {
+      products: {
+        active: productsAnalytics.overview.active_products,
+        inactive: productsAnalytics.overview.inactive_products,
+        draft: productsAnalytics.overview.draft_products,
+        archived: productsAnalytics.overview.archived_products,
+      },
+      inventory: {
+        in_stock: productsAnalytics.overview.total_products - productsAnalytics.stock_analysis.low_stock_count - productsAnalytics.stock_analysis.out_of_stock_count,
+        low_stock: productsAnalytics.stock_analysis.low_stock_count,
+        out_of_stock: productsAnalytics.stock_analysis.out_of_stock_count,
+        discontinued: 0,
+      },
+      movement_trends: {
+        increasing: 0,
+        decreasing: 0,
+        stable: productsAnalytics.overview.total_products,
+      },
+    },
+    stock_analysis: {
+      low_stock_count: productsAnalytics.stock_analysis.low_stock_count,
+      out_of_stock_count: productsAnalytics.stock_analysis.out_of_stock_count,
+      low_stock_percentage: productsAnalytics.stock_analysis.low_stock_percentage,
+      out_of_stock_percentage: productsAnalytics.stock_analysis.out_of_stock_percentage,
+      needs_attention: productsAnalytics.stock_analysis.low_stock_count + productsAnalytics.stock_analysis.out_of_stock_count,
+    },
+    alerts: {
+      needs_sync: false,
+      low_stock_alert: productsAnalytics.stock_analysis.low_stock_count > 0,
+      out_of_stock_alert: productsAnalytics.stock_analysis.out_of_stock_count > 0,
+      consistency_alert: false,
+      high_discrepancy: false,
+    },
+  } : null
+
+  if ((analyticsLoading || productsLoading) && (!analyticsData || !statsData)) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
+          <p className="text-gray-600">Loading dashboard data...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (analyticsError || ordersError || productsError) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-red-600 mb-4">
+            <AlertTriangle className="w-8 h-8 mx-auto mb-2" />
+            <p className="font-semibold">Failed to load dashboard data</p>
+            <p className="text-sm text-gray-600">{analyticsError || ordersError || productsError}</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!analyticsData || !statsData) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-gray-600">No dashboard data available</p>
+        </div>
+      </div>
+    )
+  }
+
+  const { metrics, topProducts } = analyticsData
+  const recentOrders = ordersData?.orders || []
+  const lowStockItems = statsData.stock_analysis.low_stock_count > 0 ? [
+    { name: "Low Stock Alert", stock: statsData.stock_analysis.low_stock_count, threshold: statsData.overview.total_products }
+  ] : []
+  
+  // Use products analytics top products if available, otherwise fall back to analytics top products
+  const displayTopProducts = productsAnalytics?.top_products || topProducts
+
   return (
     <div className="h-full">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -66,6 +153,50 @@ export default function Dashboard() {
             </div>
           </div>
 
+          {/* Product Insights and Alerts */}
+          {productsAnalytics?.insights && productsAnalytics.insights.length > 0 && (
+            <div className="space-y-3">
+              {productsAnalytics.insights.slice(0, 3).map((insight, index) => (
+                <Card key={index} className={`${
+                  insight.type === 'critical' ? 'bg-red-50 border-red-200' :
+                  insight.type === 'warning' ? 'bg-yellow-50 border-yellow-200' :
+                  'bg-blue-50 border-blue-200'
+                }`}>
+                  <CardContent className="p-4">
+                    <div className="flex items-center space-x-3">
+                      <AlertTriangle className={`w-5 h-5 ${
+                        insight.type === 'critical' ? 'text-red-600' :
+                        insight.type === 'warning' ? 'text-yellow-600' :
+                        'text-blue-600'
+                      }`} />
+                      <div className="flex-1">
+                        <h3 className={`font-semibold ${
+                          insight.type === 'critical' ? 'text-red-800' :
+                          insight.type === 'warning' ? 'text-yellow-800' :
+                          'text-blue-800'
+                        }`}>{insight.title}</h3>
+                        <p className={`text-sm ${
+                          insight.type === 'critical' ? 'text-red-700' :
+                          insight.type === 'warning' ? 'text-yellow-700' :
+                          'text-blue-700'
+                        }`}>
+                          {insight.message}
+                        </p>
+                      </div>
+                      <Button size="sm" variant="outline" className={`${
+                        insight.type === 'critical' ? 'border-red-300 text-red-700 hover:bg-red-100' :
+                        insight.type === 'warning' ? 'border-yellow-300 text-yellow-700 hover:bg-yellow-100' :
+                        'border-blue-300 text-blue-700 hover:bg-blue-100'
+                      }`}>
+                        View Details
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+
           {/* Optimized Stats Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <Card className="relative overflow-hidden bg-white border-0 shadow-md hover:shadow-lg transition-all duration-300 group">
@@ -77,13 +208,13 @@ export default function Dashboard() {
                   </div>
                   <div className="flex items-center text-xs font-medium text-green-600 bg-green-50 px-1.5 py-0.5 rounded-full">
                     <TrendingUp className="h-2.5 w-2.5 mr-1" />
-                    +{stats.revenueChange}%
+                    +{metrics.revenueGrowth.toFixed(1)}%
                   </div>
                 </div>
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-gray-600">Total Revenue</p>
-                  <p className="text-xl font-bold text-gray-900">{stats.totalRevenue.toLocaleString()} UGX</p>
-                  <p className="text-xs text-gray-500">+{(stats.totalRevenue * stats.revenueChange / 100).toLocaleString()} UGX from last month</p>
+                  <p className="text-xl font-bold text-gray-900">{metrics.totalRevenue.toLocaleString()} UGX</p>
+                  <p className="text-xs text-gray-500">+{(metrics.totalRevenue * metrics.revenueGrowth / 100).toLocaleString()} UGX from last month</p>
                 </div>
               </CardContent>
             </Card>
@@ -97,13 +228,13 @@ export default function Dashboard() {
                   </div>
                   <div className="flex items-center text-xs font-medium text-green-600 bg-green-50 px-1.5 py-0.5 rounded-full">
                     <TrendingUp className="h-2.5 w-2.5 mr-1" />
-                    +{stats.ordersChange}%
+                    +{metrics.ordersGrowth.toFixed(1)}%
                   </div>
                 </div>
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-gray-600">Total Orders</p>
-                  <p className="text-xl font-bold text-gray-900">{stats.totalOrders}</p>
-                  <p className="text-xs text-gray-500">+{Math.round(stats.totalOrders * stats.ordersChange / 100)} new orders this month</p>
+                  <p className="text-xl font-bold text-gray-900">{metrics.totalOrders}</p>
+                  <p className="text-xs text-gray-500">+{Math.round(metrics.totalOrders * metrics.ordersGrowth / 100)} new orders this month</p>
                 </div>
               </CardContent>
             </Card>
@@ -117,13 +248,13 @@ export default function Dashboard() {
                   </div>
                   <div className="flex items-center text-xs font-medium text-green-600 bg-green-50 px-1.5 py-0.5 rounded-full">
                     <TrendingUp className="h-2.5 w-2.5 mr-1" />
-                    +{stats.productsChange}%
+                    +12.5%
                   </div>
                 </div>
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-gray-600">Total Products</p>
-                  <p className="text-xl font-bold text-gray-900">{stats.totalProducts}</p>
-                  <p className="text-xs text-gray-500">+{Math.round(stats.totalProducts * stats.productsChange / 100)} new products this month</p>
+                  <p className="text-xl font-bold text-gray-900">{statsData.overview.total_products}</p>
+                  <p className="text-xs text-gray-500">{statsData.status_breakdown.products.active} active products</p>
                 </div>
               </CardContent>
             </Card>
@@ -137,13 +268,13 @@ export default function Dashboard() {
                   </div>
                   <div className="flex items-center text-xs font-medium text-green-600 bg-green-50 px-1.5 py-0.5 rounded-full">
                     <TrendingUp className="h-2.5 w-2.5 mr-1" />
-                    +{stats.customersChange}%
+                    +{metrics.customersGrowth.toFixed(1)}%
                   </div>
                 </div>
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-gray-600">Total Customers</p>
-                  <p className="text-xl font-bold text-gray-900">{stats.totalCustomers}</p>
-                  <p className="text-xs text-gray-500">+{Math.round(stats.totalCustomers * stats.customersChange / 100)} new customers this month</p>
+                  <p className="text-xl font-bold text-gray-900">{metrics.totalCustomers}</p>
+                  <p className="text-xs text-gray-500">+{Math.round(metrics.totalCustomers * metrics.customersGrowth / 100)} new customers this month</p>
                 </div>
               </CardContent>
             </Card>
@@ -163,14 +294,14 @@ export default function Dashboard() {
               </CardHeader>
               <CardContent className="p-0">
                 <div className="divide-y divide-gray-100">
-                  {recentOrders.map((order, index) => (
+                  {recentOrders.length > 0 ? recentOrders.map((order, index) => (
                     <div key={order.id} className="p-6 hover:bg-gray-50/50 transition-colors">
                       <div className="flex items-center justify-between">
                         <div className="flex-1">
                           <div className="flex items-center space-x-3 mb-2">
-                            <div className="font-semibold text-gray-900">{order.id}</div>
+                            <div className="font-semibold text-gray-900">{order.order_number}</div>
                             <span className={`px-3 py-1 text-xs font-medium rounded-full ${
-                              order.status === 'completed' ? 'bg-green-100 text-green-700 ring-1 ring-green-200' :
+                              order.status === 'delivered' ? 'bg-green-100 text-green-700 ring-1 ring-green-200' :
                               order.status === 'processing' ? 'bg-blue-100 text-blue-700 ring-1 ring-blue-200' :
                               order.status === 'shipped' ? 'bg-purple-100 text-purple-700 ring-1 ring-purple-200' :
                               'bg-yellow-100 text-yellow-700 ring-1 ring-yellow-200'
@@ -179,16 +310,21 @@ export default function Dashboard() {
                             </span>
                           </div>
                           <div className="text-sm text-gray-600">
-                            <span className="font-medium">{order.customer}</span> • {order.product}
+                            <span className="font-medium">{order.customer_name}</span> • {order.order_items[0]?.product_name || 'Multiple items'}
                           </div>
                         </div>
                         <div className="text-right">
-                          <div className="text-lg font-bold text-gray-900">{order.amount.toLocaleString()} UGX</div>
-                          <div className="text-xs text-gray-500">Just now</div>
+                          <div className="text-lg font-bold text-gray-900">{order.total_amount.toLocaleString()} UGX</div>
+                          <div className="text-xs text-gray-500">{new Date(order.order_date).toLocaleDateString()}</div>
                         </div>
                       </div>
                     </div>
-                  ))}
+                  )) : (
+                    <div className="p-6 text-center text-gray-500">
+                      <ShoppingCart className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                      <p>No recent orders</p>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -205,7 +341,7 @@ export default function Dashboard() {
               </CardHeader>
               <CardContent className="p-0">
                 <div className="divide-y divide-gray-100">
-                  {lowStockItems.map((item, index) => (
+                  {lowStockItems.length > 0 ? lowStockItems.map((item, index) => (
                     <div key={index} className="p-4 hover:bg-red-50/30 transition-colors">
                       <div className="flex items-center justify-between">
                         <div className="flex-1">
@@ -225,7 +361,12 @@ export default function Dashboard() {
                         </Button>
                       </div>
                     </div>
-                  ))}
+                  )) : (
+                    <div className="p-6 text-center text-gray-500">
+                      <Package className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                      <p>All products well stocked</p>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -238,31 +379,46 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent className="p-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {topProducts.map((product, index) => (
+                {displayTopProducts.length > 0 ? displayTopProducts.slice(0, 3).map((product, index) => (
                   <div key={index} className="group relative overflow-hidden bg-gradient-to-br from-blue-50 via-emerald-50 to-green-50 rounded-lg p-4 border border-blue-200/50 hover:shadow-md transition-all duration-300">
                     <div className="absolute top-2 right-2">
                       <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-emerald-500 rounded-lg flex items-center justify-center text-white font-bold text-sm shadow-sm">
-                        #{index + 1}
+                        #{product.rank || index + 1}
                       </div>
                     </div>
                     <div className="space-y-3">
-                      <div className="font-semibold text-gray-900 text-lg leading-tight pr-10">{product.name}</div>
+                      <div className="font-semibold text-gray-900 text-lg leading-tight pr-10">
+                        {product.name.length > 30 ? product.name.substring(0, 30) + '...' : product.name}
+                      </div>
                       <div className="space-y-1">
                         <div className="flex items-center justify-between text-sm">
-                          <span className="text-gray-600">Sales</span>
-                          <span className="font-medium text-gray-900">{product.sales}</span>
+                          <span className="text-gray-600">Price</span>
+                          <span className="font-medium text-gray-900">{product.price?.toLocaleString()} UGX</span>
                         </div>
                         <div className="flex items-center justify-between text-sm">
-                          <span className="text-gray-600">Revenue</span>
-                          <span className="font-semibold text-green-600">{product.revenue.toLocaleString()} UGX</span>
+                          <span className="text-gray-600">Stock</span>
+                          <span className="font-medium text-gray-900">{product.stock || product.sales || 0}</span>
                         </div>
+                        {product.estimated_revenue && (
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-gray-600">Est. Revenue</span>
+                            <span className="font-semibold text-green-600">{(product.estimated_revenue / 1000000).toFixed(1)}M UGX</span>
+                          </div>
+                        )}
                       </div>
                       <div className="pt-2 border-t border-blue-200/50">
-                        <div className="text-xs text-blue-700 font-medium">Best performer this month</div>
+                        <div className="text-xs text-blue-700 font-medium">
+                          {productsAnalytics?.top_products ? 'Top performer' : 'Best seller'}
+                        </div>
                       </div>
                     </div>
                   </div>
-                ))}
+                )) : (
+                  <div className="col-span-3 text-center py-8 text-gray-500">
+                    <Package className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                    <p>No product data available</p>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>

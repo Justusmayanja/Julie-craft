@@ -26,87 +26,16 @@ import {
   Truck,
   Banknote,
   Calendar,
-  User
+  User,
+  Loader2
 } from "lucide-react"
+import { useOrders } from "@/hooks/use-orders"
 
-// Mock data - replace with real data from your database
-const mockOrders = [
-  {
-    id: "ORD-001",
-    customer: {
-      name: "Sarah Johnson",
-      email: "sarah.johnson@email.com",
-      avatar: "SJ"
-    },
-    items: [
-      { name: "Ceramic Bowl Set", quantity: 1, price: 89.99 }
-    ],
-    total: 89.99,
-    status: "completed",
-    paymentStatus: "paid",
-    shippingAddress: "123 Main St, Springfield, IL 62701",
-    orderDate: "2024-01-15",
-    shippedDate: "2024-01-16"
-  },
-  {
-    id: "ORD-002",
-    customer: {
-      name: "Mike Chen",
-      email: "mike.chen@email.com",
-      avatar: "MC"
-    },
-    items: [
-      { name: "Silver Wire Bracelet", quantity: 2, price: 67.99 }
-    ],
-    total: 135.98,
-    status: "processing",
-    paymentStatus: "paid",
-    shippingAddress: "456 Oak Ave, Chicago, IL 60601",
-    orderDate: "2024-01-14",
-    shippedDate: null
-  },
-  {
-    id: "ORD-003",
-    customer: {
-      name: "Emily Davis",
-      email: "emily.davis@email.com",
-      avatar: "ED"
-    },
-    items: [
-      { name: "Wool Throw Blanket", quantity: 1, price: 156.99 },
-      { name: "Silk Scarf", quantity: 1, price: 78.99 }
-    ],
-    total: 235.98,
-    status: "shipped",
-    paymentStatus: "paid",
-    shippingAddress: "789 Pine St, Denver, CO 80202",
-    orderDate: "2024-01-13",
-    shippedDate: "2024-01-15"
-  },
-  {
-    id: "ORD-004",
-    customer: {
-      name: "Alex Smith",
-      email: "alex.smith@email.com",
-      avatar: "AS"
-    },
-    items: [
-      { name: "Carved Wooden Bowl", quantity: 1, price: 92.99 }
-    ],
-    total: 92.99,
-    status: "pending",
-    paymentStatus: "pending",
-    shippingAddress: "321 Elm St, Austin, TX 73301",
-    orderDate: "2024-01-12",
-    shippedDate: null
-  },
-]
-
-const statusOptions = ["All", "pending", "processing", "shipped", "completed", "cancelled"]
+const statusOptions = ["All", "pending", "processing", "shipped", "delivered", "cancelled"]
 
 const getStatusColor = (status: string) => {
   switch (status) {
-    case "completed": return "bg-emerald-100 text-emerald-700 border-emerald-200"
+    case "delivered": return "bg-emerald-100 text-emerald-700 border-emerald-200"
     case "shipped": return "bg-blue-100 text-blue-700 border-blue-200"
     case "processing": return "bg-blue-100 text-blue-700 border-blue-200"
     case "pending": return "bg-gray-100 text-gray-700 border-gray-200"
@@ -117,7 +46,7 @@ const getStatusColor = (status: string) => {
 
 const getStatusIcon = (status: string) => {
   switch (status) {
-    case "completed": return <CheckCircle className="w-4 h-4" />
+    case "delivered": return <CheckCircle className="w-4 h-4" />
     case "shipped": return <Truck className="w-4 h-4" />
     case "processing": return <Clock className="w-4 h-4" />
     case "pending": return <Package className="w-4 h-4" />
@@ -129,20 +58,54 @@ const getStatusIcon = (status: string) => {
 export default function OrdersPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedStatus, setSelectedStatus] = useState("All")
-  const [orders] = useState(mockOrders)
 
-  const filteredOrders = orders.filter(order => {
-    const matchesSearch = order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         order.customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         order.customer.email.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesStatus = selectedStatus === "All" || order.status === selectedStatus
-    return matchesSearch && matchesStatus
+  const { data: ordersData, loading, error, refresh } = useOrders({
+    search: searchTerm || undefined,
+    status: selectedStatus === "All" ? undefined : selectedStatus,
+    autoRefresh: true,
+    refreshInterval: 300000 // 5 minutes
   })
 
-  const totalOrders = orders.length
-  const totalRevenue = orders.reduce((sum, order) => sum + order.total, 0)
-  const pendingOrders = orders.filter(o => o.status === "pending").length
-  const completedOrders = orders.filter(o => o.status === "completed").length
+  if (loading && !ordersData) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
+          <p className="text-gray-600">Loading orders...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-red-600 mb-4">
+            <Package className="w-8 h-8 mx-auto mb-2" />
+            <p className="font-semibold">Failed to load orders</p>
+            <p className="text-sm text-gray-600">{error}</p>
+          </div>
+          <Button onClick={refresh} variant="outline">
+            <Download className="w-4 h-4 mr-2" />
+            Try Again
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  if (!ordersData) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-gray-600">No orders data available</p>
+        </div>
+      </div>
+    )
+  }
+
+  const { orders, stats } = ordersData
 
   return (
     <div className="h-full">
@@ -155,6 +118,16 @@ export default function OrdersPage() {
               <p className="text-gray-600 mt-1 text-base">Manage customer orders and track fulfillment</p>
             </div>
             <div className="flex gap-3">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="bg-white hover:bg-gray-50 border-gray-300"
+                onClick={refresh}
+                disabled={loading}
+              >
+                <Download className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
               <Button variant="outline" size="sm" className="bg-white hover:bg-gray-50 border-gray-300">
                 <Download className="w-4 h-4 mr-2" />
                 Export
@@ -174,7 +147,7 @@ export default function OrdersPage() {
                 </div>
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-gray-600">Total Orders</p>
-                  <p className="text-xl font-bold text-gray-900">{totalOrders}</p>
+                  <p className="text-xl font-bold text-gray-900">{stats.totalOrders}</p>
                   <p className="text-xs text-gray-500">All time orders</p>
                 </div>
               </CardContent>
@@ -190,7 +163,7 @@ export default function OrdersPage() {
                 </div>
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-gray-600">Total Revenue</p>
-                  <p className="text-xl font-bold text-gray-900">{totalRevenue.toLocaleString()} UGX</p>
+                  <p className="text-xl font-bold text-gray-900">{stats.totalRevenue.toLocaleString()} UGX</p>
                   <p className="text-xs text-gray-500">Total sales value</p>
                 </div>
               </CardContent>
@@ -206,7 +179,7 @@ export default function OrdersPage() {
                 </div>
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-gray-600">Pending Orders</p>
-                  <p className="text-xl font-bold text-gray-900">{pendingOrders}</p>
+                  <p className="text-xl font-bold text-gray-900">{stats.pendingOrders}</p>
                   <p className="text-xs text-gray-500">Need attention</p>
                 </div>
               </CardContent>
@@ -222,7 +195,7 @@ export default function OrdersPage() {
                 </div>
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-gray-600">Completed</p>
-                  <p className="text-xl font-bold text-gray-900">{completedOrders}</p>
+                  <p className="text-xl font-bold text-gray-900">{stats.completedOrders}</p>
                   <p className="text-xs text-gray-500">Successfully fulfilled</p>
                 </div>
               </CardContent>
@@ -283,32 +256,32 @@ export default function OrdersPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredOrders.map((order) => (
+                    {orders.map((order) => (
                       <TableRow key={order.id} className="hover:bg-gray-50/50 transition-colors">
                         <TableCell className="py-4">
-                          <div className="font-semibold text-gray-900">{order.id}</div>
+                          <div className="font-semibold text-gray-900">{order.order_number}</div>
                         </TableCell>
                         <TableCell className="py-4">
                           <div className="flex items-center space-x-3">
                             <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-emerald-500 rounded-full flex items-center justify-center text-white text-sm font-medium shadow-sm">
-                              {order.customer.avatar}
+                              {order.customer_name.charAt(0).toUpperCase()}
                             </div>
                             <div>
-                              <div className="font-semibold text-gray-900">{order.customer.name}</div>
-                              <div className="text-sm text-gray-500">{order.customer.email}</div>
+                              <div className="font-semibold text-gray-900">{order.customer_name}</div>
+                              <div className="text-sm text-gray-500">{order.customer_email}</div>
                             </div>
                           </div>
                         </TableCell>
                         <TableCell className="py-4">
                           <div className="space-y-1">
-                            {order.items.map((item, index) => (
+                            {order.order_items.map((item, index) => (
                               <div key={index} className="text-sm text-gray-700">
-                                <span className="font-semibold">{item.quantity}x</span> {item.name}
+                                <span className="font-semibold">{item.quantity}x</span> {item.product_name}
                               </div>
                             ))}
                           </div>
                         </TableCell>
-                        <TableCell className="py-4 font-semibold text-gray-900">{order.total.toLocaleString()} UGX</TableCell>
+                        <TableCell className="py-4 font-semibold text-gray-900">{order.total_amount.toLocaleString()} UGX</TableCell>
                         <TableCell className="py-4">
                           <Badge className={getStatusColor(order.status)}>
                             <div className="flex items-center space-x-1">
@@ -319,19 +292,19 @@ export default function OrdersPage() {
                         </TableCell>
                         <TableCell className="py-4">
                           <Badge 
-                            className={order.paymentStatus === 'paid' 
+                            className={order.payment_status === 'paid' 
                               ? 'bg-emerald-100 text-emerald-700 border-emerald-200' 
                               : 'bg-red-100 text-red-700 border-red-200'
                             }
                           >
-                            {order.paymentStatus.charAt(0).toUpperCase() + order.paymentStatus.slice(1)}
+                            {order.payment_status.charAt(0).toUpperCase() + order.payment_status.slice(1)}
                           </Badge>
                         </TableCell>
                         <TableCell className="py-4">
                           <div className="text-sm">
-                            <div className="font-semibold text-gray-900">{order.orderDate}</div>
-                            {order.shippedDate && (
-                              <div className="text-gray-500">Shipped: {order.shippedDate}</div>
+                            <div className="font-semibold text-gray-900">{new Date(order.order_date).toLocaleDateString()}</div>
+                            {order.shipped_date && (
+                              <div className="text-gray-500">Shipped: {new Date(order.shipped_date).toLocaleDateString()}</div>
                             )}
                           </div>
                         </TableCell>
@@ -351,7 +324,7 @@ export default function OrdersPage() {
                 </Table>
               </div>
 
-              {filteredOrders.length === 0 && (
+              {orders.length === 0 && (
                 <div className="text-center py-12 px-4">
                   <Package className="w-16 h-16 text-gray-400 mx-auto mb-4" />
                   <h3 className="text-lg font-semibold text-gray-900 mb-2">No orders found</h3>

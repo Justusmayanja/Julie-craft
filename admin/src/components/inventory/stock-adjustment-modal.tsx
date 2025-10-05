@@ -18,7 +18,7 @@ import {
   CheckCircle,
   XCircle
 } from "lucide-react"
-import { useStockAdjustment } from "@/hooks/use-enhanced-inventory"
+import { useRobustInventory } from "@/hooks/use-robust-inventory"
 
 interface StockAdjustmentModalProps {
   isOpen: boolean
@@ -28,9 +28,9 @@ interface StockAdjustmentModalProps {
     id: string
     name: string
     sku: string
-    current_quantity: number
-    available_quantity?: number
-    reserved_quantity?: number
+    physical_stock: number
+    available_stock: number
+    reserved_stock: number
     min_stock_level: number
     max_stock_level: number
     reorder_point: number
@@ -38,14 +38,14 @@ interface StockAdjustmentModalProps {
 }
 
 export function StockAdjustmentModal({ isOpen, onClose, onSuccess, product }: StockAdjustmentModalProps) {
-  const [adjustmentType, setAdjustmentType] = useState<'increase' | 'decrease' | 'set' | 'reserve' | 'unreserve'>('increase')
+  const [adjustmentType, setAdjustmentType] = useState<'increase' | 'decrease' | 'set'>('increase')
   const [quantity, setQuantity] = useState('')
   const [reason, setReason] = useState('')
   const [notes, setNotes] = useState('')
   const [reference, setReference] = useState('')
   const [validationError, setValidationError] = useState('')
 
-  const { adjustStock, loading, error } = useStockAdjustment()
+  const { loading, error } = useRobustInventory()
 
   // Reset form when modal opens/closes or product changes
   useEffect(() => {
@@ -62,22 +62,21 @@ export function StockAdjustmentModal({ isOpen, onClose, onSuccess, product }: St
   useEffect(() => {
     if (reason) {
       switch (reason) {
-        case 'received':
-        case 'return':
-          if (adjustmentType === 'decrease' || adjustmentType === 'reserve' || adjustmentType === 'unreserve') {
+        case 'new_creation':
+        case 'customer_return':
+        case 'supplier_delivery':
+        case 'inventory_correction':
+          if (adjustmentType === 'decrease') {
             setAdjustmentType('increase')
           }
           break
-        case 'damaged':
-        case 'lost':
-        case 'sale':
-          if (adjustmentType === 'increase' || adjustmentType === 'reserve' || adjustmentType === 'unreserve') {
+        case 'quality_issue':
+        case 'damage_loss':
+        case 'theft_loss':
+        case 'sold_item':
+        case 'gift_donation':
+          if (adjustmentType === 'increase') {
             setAdjustmentType('decrease')
-          }
-          break
-        case 'transfer':
-          if (adjustmentType === 'increase' || adjustmentType === 'decrease') {
-            setAdjustmentType('reserve')
           }
           break
       }
@@ -104,45 +103,65 @@ export function StockAdjustmentModal({ isOpen, onClose, onSuccess, product }: St
       return
     }
 
-    // Business logic validation
-    const validationResult = validateStockAdjustment(product, adjustmentType, quantityNum, reason)
-    if (!validationResult.isValid) {
-      setValidationError(validationResult.error)
+    // Calculate new quantity based on adjustment type
+    let newQuantity = product.physical_stock || 0
+    if (adjustmentType === 'increase') {
+      newQuantity = product.physical_stock + quantityNum
+    } else if (adjustmentType === 'decrease') {
+      newQuantity = product.physical_stock - quantityNum
+    } else if (adjustmentType === 'set') {
+      newQuantity = quantityNum
+    }
+
+    // Validate new quantity
+    if (newQuantity < 0) {
+      setValidationError('Cannot set stock below zero')
       return
     }
 
-    // Calculate new quantity
-    const newQuantity = calculateNewQuantity(product.current_quantity, adjustmentType, quantityNum)
+    try {
+      // Map our new reason values to the API's expected values
+      const reasonMapping: Record<string, string> = {
+        'new_creation': 'received',
+        'supplier_delivery': 'received', 
+        'customer_return': 'return',
+        'inventory_correction': 'correction',
+        'sold_item': 'sale',
+        'quality_issue': 'damaged',
+        'damage_loss': 'damaged',
+        'gift_donation': 'other',
+        'theft_loss': 'lost'
+      }
 
-    // Additional business rules
-    if (adjustmentType === 'decrease' && newQuantity < 0) {
-      setValidationError('Cannot decrease stock below zero. Consider using "Set to Specific Value" instead.')
-      return
-    }
+      // Use the basic inventory adjustment API
+      const adjustmentData = {
+        product_id: product.id,
+        adjustment_type: adjustmentType,
+        quantity: quantityNum,
+        reason: reasonMapping[reason] || 'other',
+        notes: notes || `Stock ${adjustmentType}: ${reason}`,
+        reference: reference || undefined
+      }
 
-    // Maximum stock level validation removed - allowing unlimited stock levels
+      const response = await fetch('/api/inventory/adjust', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(adjustmentData)
+      })
 
-    // Map reservation types to existing adjustment types
-    let mappedAdjustmentType: 'increase' | 'decrease' | 'set' = adjustmentType as any
-    if (adjustmentType === 'reserve') {
-      mappedAdjustmentType = 'decrease' // Reserve reduces available stock
-    } else if (adjustmentType === 'unreserve') {
-      mappedAdjustmentType = 'increase' // Unreserve increases available stock
-    }
+      const result = await response.json()
 
-    // Submit adjustment
-    const result = await adjustStock({
-      product_id: product.id,
-      adjustment_type: mappedAdjustmentType,
-      quantity: quantityNum,
-      reason: reason as any,
-      notes: notes || undefined,
-      reference: reference || undefined,
-    })
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to adjust stock')
+      }
 
-    if (result.success) {
+      // Success - close modal and refresh data
       onSuccess()
       onClose()
+    } catch (error) {
+      setValidationError(error instanceof Error ? error.message : 'Failed to submit adjustment')
     }
   }
 
@@ -184,13 +203,13 @@ export function StockAdjustmentModal({ isOpen, onClose, onSuccess, product }: St
     }
 
     // Check for potential data entry errors
-    if (type === 'set' && quantity === product.current_quantity) {
+    if (type === 'set' && quantity === product.physical_stock) {
       return { isValid: false, error: 'New quantity is the same as current quantity. No adjustment needed.' }
     }
 
     // Check reservation limits
-    if (type === 'reserve' && quantity > product.current_quantity) {
-      return { isValid: false, error: `Cannot reserve ${quantity} units. Only ${product.current_quantity} units available.` }
+    if (type === 'reserve' && quantity > product.physical_stock) {
+      return { isValid: false, error: `Cannot reserve ${quantity} units. Only ${product.physical_stock} units available.` }
     }
 
     return { isValid: true, error: '' }
@@ -205,12 +224,6 @@ export function StockAdjustmentModal({ isOpen, onClose, onSuccess, product }: St
         return Math.max(0, current - quantity)
       case 'set':
         return quantity
-      case 'reserve':
-        // Reserving doesn't change total stock, but affects available quantity
-        return current
-      case 'unreserve':
-        // Unreserving doesn't change total stock, but affects available quantity
-        return current
       default:
         return current
     }
@@ -220,10 +233,6 @@ export function StockAdjustmentModal({ isOpen, onClose, onSuccess, product }: St
   const calculateAvailableQuantity = (current: number, reserved: number, type: string, quantity: number) => {
     const currentReserved = reserved || 0
     switch (type) {
-      case 'reserve':
-        return Math.max(0, current - (currentReserved + quantity))
-      case 'unreserve':
-        return Math.min(current, current - (currentReserved - quantity))
       case 'increase':
         return current + quantity - currentReserved
       case 'decrease':
@@ -236,12 +245,12 @@ export function StockAdjustmentModal({ isOpen, onClose, onSuccess, product }: St
   }
 
   const getNewQuantity = () => {
-    if (!product || !quantity) return product?.current_quantity || 0
+    if (!product || !quantity) return product?.physical_stock || 0
     
     const quantityNum = parseInt(quantity)
-    if (isNaN(quantityNum)) return product.current_quantity
+    if (isNaN(quantityNum)) return product.physical_stock
 
-    return calculateNewQuantity(product.current_quantity, adjustmentType, quantityNum)
+    return calculateNewQuantity(product.physical_stock, adjustmentType, quantityNum)
   }
 
   const getQuantityChange = () => {
@@ -250,36 +259,32 @@ export function StockAdjustmentModal({ isOpen, onClose, onSuccess, product }: St
     const quantityNum = parseInt(quantity)
     if (isNaN(quantityNum)) return 0
 
-    const newQty = calculateNewQuantity(product.current_quantity, adjustmentType, quantityNum)
-    return newQty - product.current_quantity
+    const newQty = calculateNewQuantity(product.physical_stock, adjustmentType, quantityNum)
+    return newQty - product.physical_stock
   }
 
   const getNewReservedQuantity = () => {
-    if (!product || !quantity) return product?.reserved_quantity || 0
+    if (!product || !quantity) return product?.reserved_stock || 0
     
     const quantityNum = parseInt(quantity)
-    if (isNaN(quantityNum)) return product.reserved_quantity || 0
+    if (isNaN(quantityNum)) return product.reserved_stock || 0
 
-    const currentReserved = product.reserved_quantity || 0
+    const currentReserved = product.reserved_stock || 0
     switch (adjustmentType) {
-      case 'reserve':
-        return currentReserved + quantityNum
-      case 'unreserve':
-        return Math.max(0, currentReserved - quantityNum)
       default:
         return currentReserved
     }
   }
 
   const getNewAvailableQuantity = () => {
-    if (!product || !quantity) return product?.available_quantity || 0
+    if (!product || !quantity) return product?.available_stock || 0
     
     const quantityNum = parseInt(quantity)
-    if (isNaN(quantityNum)) return product.available_quantity || 0
+    if (isNaN(quantityNum)) return product.available_stock || 0
 
     return calculateAvailableQuantity(
-      product.current_quantity, 
-      product.reserved_quantity || 0, 
+      product.physical_stock, 
+      product.reserved_stock || 0, 
       adjustmentType, 
       quantityNum
     )
@@ -292,24 +297,9 @@ export function StockAdjustmentModal({ isOpen, onClose, onSuccess, product }: St
     const quantityNum = parseInt(quantity)
     if (isNaN(quantityNum)) return null
 
-    const newQty = calculateNewQuantity(product.current_quantity, adjustmentType, quantityNum)
+    const newQty = calculateNewQuantity(product.physical_stock, adjustmentType, quantityNum)
     const newAvailable = getNewAvailableQuantity()
     
-    // Check for reservation-specific warnings
-    if (adjustmentType === 'reserve') {
-      if (quantityNum > (product.available_quantity || product.current_quantity)) {
-        return { type: 'error', message: `Cannot reserve ${quantityNum} units. Only ${product.available_quantity || product.current_quantity} units available.` }
-      }
-      if (newAvailable <= 0) {
-        return { type: 'warning', message: 'All stock will be reserved after this adjustment' }
-      }
-    }
-    
-    if (adjustmentType === 'unreserve') {
-      if (quantityNum > (product.reserved_quantity || 0)) {
-        return { type: 'error', message: `Cannot unreserve ${quantityNum} units. Only ${product.reserved_quantity || 0} units reserved.` }
-      }
-    }
     
     // Check for low stock warning
     if (newQty > 0 && newQty <= (product.reorder_point || 0)) {
@@ -376,15 +366,15 @@ export function StockAdjustmentModal({ isOpen, onClose, onSuccess, product }: St
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="bg-white p-3 rounded-lg border border-slate-200/60">
                 <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Total Stock</div>
-                <div className="text-lg font-bold text-slate-900">{product.current_quantity}</div>
+                <div className="text-lg font-bold text-slate-900">{product.physical_stock}</div>
               </div>
               <div className="bg-white p-3 rounded-lg border border-slate-200/60">
                 <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Available</div>
-                <div className="text-lg font-bold text-emerald-600">{product.available_quantity || product.current_quantity}</div>
+                <div className="text-lg font-bold text-emerald-600">{product.available_stock || product.physical_stock}</div>
               </div>
               <div className="bg-white p-3 rounded-lg border border-slate-200/60">
                 <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Reserved</div>
-                <div className="text-lg font-bold text-purple-600">{product.reserved_quantity || 0}</div>
+                <div className="text-lg font-bold text-purple-600">{product.reserved_stock || 0}</div>
               </div>
               <div className="bg-white p-3 rounded-lg border border-slate-200/60">
                 <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Reorder Point</div>
@@ -410,8 +400,8 @@ export function StockAdjustmentModal({ isOpen, onClose, onSuccess, product }: St
                       <TrendingUp className="w-4 h-4 text-green-600" />
                     </div>
                     <div>
-                      <div className="font-semibold text-slate-900">Increase Stock</div>
-                      <div className="text-xs text-slate-500">Add inventory to current level</div>
+                      <div className="font-semibold text-slate-900">Add to Inventory</div>
+                      <div className="text-xs text-slate-500">New creations, returns, deliveries</div>
                     </div>
                   </div>
                 </SelectItem>
@@ -421,8 +411,8 @@ export function StockAdjustmentModal({ isOpen, onClose, onSuccess, product }: St
                       <TrendingDown className="w-4 h-4 text-red-600" />
                     </div>
                     <div>
-                      <div className="font-semibold text-slate-900">Decrease Stock</div>
-                      <div className="text-xs text-slate-500">Remove inventory from current level</div>
+                      <div className="font-semibold text-slate-900">Remove from Inventory</div>
+                      <div className="text-xs text-slate-500">Sales, damages, losses</div>
                     </div>
                   </div>
                 </SelectItem>
@@ -432,30 +422,8 @@ export function StockAdjustmentModal({ isOpen, onClose, onSuccess, product }: St
                       <Target className="w-4 h-4 text-blue-600" />
                     </div>
                     <div>
-                      <div className="font-semibold text-slate-900">Set to Specific Value</div>
-                      <div className="text-xs text-slate-500">Set exact inventory quantity</div>
-                    </div>
-                  </div>
-                </SelectItem>
-                <SelectItem value="reserve">
-                  <div className="flex items-center gap-3">
-                    <div className="p-1 bg-purple-100 rounded-md">
-                      <Package className="w-4 h-4 text-purple-600" />
-                    </div>
-                    <div>
-                      <div className="font-semibold text-slate-900">Reserve Stock</div>
-                      <div className="text-xs text-slate-500">Reserve quantity for future use</div>
-                    </div>
-                  </div>
-                </SelectItem>
-                <SelectItem value="unreserve">
-                  <div className="flex items-center gap-3">
-                    <div className="p-1 bg-cyan-100 rounded-md">
-                      <Package className="w-4 h-4 text-cyan-600" />
-                    </div>
-                    <div>
-                      <div className="font-semibold text-slate-900">Unreserve Stock</div>
-                      <div className="text-xs text-slate-500">Release reserved quantity back to available</div>
+                      <div className="font-semibold text-slate-900">Set Exact Count</div>
+                      <div className="text-xs text-slate-500">Physical count correction</div>
                     </div>
                   </div>
                 </SelectItem>
@@ -466,10 +434,7 @@ export function StockAdjustmentModal({ isOpen, onClose, onSuccess, product }: St
           {/* Enhanced Quantity Input */}
           <div className="space-y-3">
             <Label htmlFor="quantity" className="text-sm font-semibold text-slate-900">
-              {adjustmentType === 'set' ? 'New Quantity' : 
-               adjustmentType === 'reserve' ? 'Quantity to Reserve' :
-               adjustmentType === 'unreserve' ? 'Quantity to Unreserve' :
-               'Quantity to Adjust'}
+              {adjustmentType === 'set' ? 'New Quantity' : 'Quantity to Adjust'}
             </Label>
             <div className="relative">
               <Input
@@ -479,10 +444,7 @@ export function StockAdjustmentModal({ isOpen, onClose, onSuccess, product }: St
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value)}
                 placeholder={
-                  adjustmentType === 'set' ? 'Enter new quantity' : 
-                  adjustmentType === 'reserve' ? 'Enter quantity to reserve' :
-                  adjustmentType === 'unreserve' ? 'Enter quantity to unreserve' :
-                  'Enter quantity'
+                  adjustmentType === 'set' ? 'Enter new quantity' : 'Enter quantity'
                 }
                 className="bg-white border-slate-300 focus:ring-blue-500/20 focus:border-blue-500 font-medium rounded-lg shadow-sm pl-4 pr-12 text-slate-900 placeholder-slate-500"
                 required
@@ -494,14 +456,14 @@ export function StockAdjustmentModal({ isOpen, onClose, onSuccess, product }: St
             {adjustmentType !== 'set' && (
               <p className="text-xs text-slate-500 font-medium">
                 {adjustmentType === 'increase' 
-                  ? `Will add to current stock of ${product.current_quantity} (unlimited capacity)`
+                  ? `Will add to current stock of ${product.physical_stock} (unlimited capacity)`
                   : adjustmentType === 'decrease'
-                  ? `Will subtract from current stock of ${product.current_quantity}`
+                  ? `Will subtract from current stock of ${product.physical_stock}`
                   : adjustmentType === 'reserve'
-                  ? `Will reserve from available stock (${product.available_quantity || product.current_quantity} available)`
+                  ? `Will reserve from available stock (${product.available_stock || product.physical_stock} available)`
                   : adjustmentType === 'unreserve'
-                  ? `Will unreserve from reserved stock (${product.reserved_quantity || 0} reserved)`
-                  : `Will adjust current stock of ${product.current_quantity}`
+                  ? `Will unreserve from reserved stock (${product.reserved_stock || 0} reserved)`
+                  : `Will adjust current stock of ${product.physical_stock}`
                 }
               </p>
             )}
@@ -519,7 +481,7 @@ export function StockAdjustmentModal({ isOpen, onClose, onSuccess, product }: St
               <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
                 <div className="bg-white p-3 rounded-lg border border-blue-200/60">
                   <div className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-1">Current Stock</div>
-                  <div className="text-lg font-bold text-slate-900">{product.current_quantity}</div>
+                  <div className="text-lg font-bold text-slate-900">{product.physical_stock}</div>
                 </div>
                 <div className="bg-white p-3 rounded-lg border border-blue-200/60">
                   <div className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-1">Change</div>
@@ -581,51 +543,51 @@ export function StockAdjustmentModal({ isOpen, onClose, onSuccess, product }: St
                 <SelectValue placeholder="Select a reason for this adjustment" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="received">
+                <SelectItem value="new_creation">
                   <div className="flex items-center gap-3">
                     <div className="p-1 bg-green-100 rounded-md">
                       <TrendingUp className="w-4 h-4 text-green-600" />
                     </div>
                     <div>
-                      <div className="font-semibold text-slate-900">Stock Received</div>
-                      <div className="text-xs text-slate-500">New inventory received from supplier</div>
+                      <div className="font-semibold text-slate-900">New Creation</div>
+                      <div className="text-xs text-slate-500">Finished crafting new handmade items</div>
                     </div>
                   </div>
                 </SelectItem>
-                <SelectItem value="damaged">
+                <SelectItem value="quality_issue">
                   <div className="flex items-center gap-3">
                     <div className="p-1 bg-red-100 rounded-md">
                       <XCircle className="w-4 h-4 text-red-600" />
                     </div>
                     <div>
-                      <div className="font-semibold text-slate-900">Damaged Goods</div>
-                      <div className="text-xs text-slate-500">Items damaged and removed from stock</div>
+                      <div className="font-semibold text-slate-900">Quality Issue</div>
+                      <div className="text-xs text-slate-500">Items don't meet quality standards</div>
                     </div>
                   </div>
                 </SelectItem>
-                <SelectItem value="lost">
+                <SelectItem value="damage_loss">
                   <div className="flex items-center gap-3">
                     <div className="p-1 bg-orange-100 rounded-md">
                       <AlertTriangle className="w-4 h-4 text-orange-600" />
                     </div>
                     <div>
-                      <div className="font-semibold text-slate-900">Lost/Stolen</div>
-                      <div className="text-xs text-slate-500">Items lost or stolen from inventory</div>
+                      <div className="font-semibold text-slate-900">Damage/Loss</div>
+                      <div className="text-xs text-slate-500">Items damaged or lost</div>
                     </div>
                   </div>
                 </SelectItem>
-                <SelectItem value="correction">
+                <SelectItem value="inventory_correction">
                   <div className="flex items-center gap-3">
                     <div className="p-1 bg-blue-100 rounded-md">
                       <Target className="w-4 h-4 text-blue-600" />
                     </div>
                     <div>
-                      <div className="font-semibold text-slate-900">Inventory Correction</div>
-                      <div className="text-xs text-slate-500">Correcting inventory discrepancies</div>
+                      <div className="font-semibold text-slate-900">Count Correction</div>
+                      <div className="text-xs text-slate-500">Physical count adjustment</div>
                     </div>
                   </div>
                 </SelectItem>
-                <SelectItem value="return">
+                <SelectItem value="customer_return">
                   <div className="flex items-center gap-3">
                     <div className="p-1 bg-purple-100 rounded-md">
                       <TrendingUp className="w-4 h-4 text-purple-600" />
@@ -636,36 +598,36 @@ export function StockAdjustmentModal({ isOpen, onClose, onSuccess, product }: St
                     </div>
                   </div>
                 </SelectItem>
-                <SelectItem value="sale">
+                <SelectItem value="sold_item">
                   <div className="flex items-center gap-3">
                     <div className="p-1 bg-indigo-100 rounded-md">
                       <TrendingDown className="w-4 h-4 text-indigo-600" />
                     </div>
                     <div>
-                      <div className="font-semibold text-slate-900">Sale/Transfer</div>
-                      <div className="text-xs text-slate-500">Items sold or transferred out</div>
+                      <div className="font-semibold text-slate-900">Item Sold</div>
+                      <div className="text-xs text-slate-500">Direct sale or order fulfillment</div>
                     </div>
                   </div>
                 </SelectItem>
-                <SelectItem value="transfer">
+                <SelectItem value="supplier_delivery">
                   <div className="flex items-center gap-3">
                     <div className="p-1 bg-cyan-100 rounded-md">
                       <Package className="w-4 h-4 text-cyan-600" />
                     </div>
                     <div>
-                      <div className="font-semibold text-slate-900">Internal Transfer</div>
-                      <div className="text-xs text-slate-500">Moving items between locations</div>
+                      <div className="font-semibold text-slate-900">Supplier Delivery</div>
+                      <div className="text-xs text-slate-500">Raw materials or supplies received</div>
                     </div>
                   </div>
                 </SelectItem>
-                <SelectItem value="other">
+                <SelectItem value="gift_donation">
                   <div className="flex items-center gap-3">
-                    <div className="p-1 bg-slate-100 rounded-md">
-                      <AlertTriangle className="w-4 h-4 text-slate-600" />
+                    <div className="p-1 bg-pink-100 rounded-md">
+                      <CheckCircle className="w-4 h-4 text-pink-600" />
                     </div>
                     <div>
-                      <div className="font-semibold text-slate-900">Other</div>
-                      <div className="text-xs text-slate-500">Other reason not listed above</div>
+                      <div className="font-semibold text-slate-900">Gift/Donation</div>
+                      <div className="text-xs text-slate-500">Given as gift or donated</div>
                     </div>
                   </div>
                 </SelectItem>

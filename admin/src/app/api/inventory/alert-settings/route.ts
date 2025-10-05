@@ -157,9 +157,10 @@ export async function PUT(request: NextRequest) {
     const currentSettings = settings || defaultSettings
 
     // Get inventory statistics
+    // Get inventory data from products table
     const { data: inventoryData, error: inventoryError } = await supabase
-      .from('inventory')
-      .select('id, current_quantity, min_stock_level, max_stock_level, product_name, category_name, status')
+      .from('products')
+      .select('id, stock_quantity, physical_stock, min_stock_level, max_stock_level, name, category_id')
 
     if (inventoryError) {
       throw new Error(`Failed to fetch inventory: ${inventoryError.message}`)
@@ -172,7 +173,7 @@ export async function PUT(request: NextRequest) {
     let outOfStockCount = 0
 
     inventoryData?.forEach(item => {
-      const quantity = item.current_quantity || 0
+      const quantity = item.physical_stock || item.stock_quantity || 0
       const maxLevel = item.max_stock_level || 100
       const threshold = (quantity / maxLevel) * 100
 

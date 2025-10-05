@@ -33,12 +33,14 @@ import {
   DollarSign,
   ArrowUpDown,
   Settings,
-  X
+  X,
+  Database
 } from "lucide-react"
-import { useEnhancedInventory } from "@/hooks/use-enhanced-inventory"
+import { useRobustInventory } from "@/hooks/use-robust-inventory"
 import { StockAdjustmentModal } from "@/components/inventory/stock-adjustment-modal"
 import { InventoryHistoryModal } from "@/components/inventory/inventory-history-modal"
 import { StockAlertSettings } from "@/components/inventory/stock-alert-settings"
+import { RobustInventoryDashboard } from "@/components/inventory/robust-inventory-dashboard"
 import { useToast } from "@/components/ui/toast"
 import { format } from "date-fns"
 
@@ -99,25 +101,45 @@ export default function InventoryPage() {
   const [showAdjustmentModal, setShowAdjustmentModal] = useState(false)
   const [showHistoryModal, setShowHistoryModal] = useState(false)
   const [showAlertSettings, setShowAlertSettings] = useState(false)
+  const [showRobustDashboard, setShowRobustDashboard] = useState(false)
+  const [isInitializingDatabase, setIsInitializingDatabase] = useState(false)
+  const [isMigratingStock, setIsMigratingStock] = useState(false)
 
-  // Use enhanced inventory data
-  const { data: inventoryData, loading, error, refresh } = useEnhancedInventory({
-    filters,
-    autoRefresh: true,
-    refreshInterval: 300000 // 5 minutes
-  })
+  // Use robust inventory data
+  const { 
+    products, 
+    loading, 
+    error, 
+    refreshData,
+    createAdjustment,
+    reserveStock,
+    fulfillOrder,
+    cancelReservation,
+    processReturn,
+    validateStock
+  } = useRobustInventory()
 
   const { addToast } = useToast()
 
   // Computed values
-  const inventory = inventoryData?.items || []
-  const summary = inventoryData?.summary
-  const totalItems = summary?.total_items || 0
-  const totalPages = inventoryData?.pagination?.total_pages || 0
-  const currentPage = inventoryData?.pagination?.page || 1
-  const lowStockCount = summary?.low_stock || 0
-  const outOfStockCount = summary?.out_of_stock || 0
-  const totalValue = summary?.total_value || 0
+  const inventory = products || []
+  const totalItems = inventory.length
+  
+  // Calculate stock status manually since computed column might not work
+  const getStockStatus = (item: any) => {
+    const availableStock = item.available_stock !== undefined 
+      ? item.available_stock 
+      : (item.physical_stock || item.stock_quantity || 0) - (item.reserved_stock || 0);
+    
+    if (availableStock <= 0) return 'out_of_stock';
+    if (availableStock <= (item.reorder_point || 10)) return 'low_stock';
+    if ((item.reserved_stock || 0) > 0) return 'reserved';
+    return 'in_stock';
+  };
+  
+  const lowStockCount = inventory.filter((item: any) => getStockStatus(item) === 'low_stock').length
+  const outOfStockCount = inventory.filter((item: any) => getStockStatus(item) === 'out_of_stock').length
+  const totalValue = inventory.reduce((sum: number, item: any) => sum + ((item.physical_stock || item.stock_quantity || 0) * (item.unit_cost || 0)), 0)
   const avgStockLevel = totalItems > 0 ? ((totalItems - lowStockCount - outOfStockCount) / totalItems) * 100 : 0
 
   // Handle filter changes
@@ -167,7 +189,7 @@ export default function InventoryPage() {
   }
 
   const handleRefresh = () => {
-    refresh()
+    refreshData()
     addToast({
       type: 'success',
       title: "Inventory Refreshed",
@@ -185,8 +207,84 @@ export default function InventoryPage() {
     setShowHistoryModal(true)
   }
 
+  const handleInitializeDatabase = async () => {
+    setIsInitializingDatabase(true)
+    try {
+      const response = await fetch('/api/admin/setup-basic', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        addToast({
+          title: 'Database Initialized',
+          description: result.message || 'Database setup completed successfully!',
+          type: 'success',
+        })
+        // Refresh the data
+        await refreshData()
+      } else {
+        addToast({
+          title: 'Initialization Failed',
+          description: result.error || 'Failed to initialize database',
+          type: 'error',
+        })
+      }
+    } catch (error) {
+      addToast({
+        title: 'Initialization Error',
+        description: 'Failed to initialize database',
+        type: 'error',
+      })
+    } finally {
+      setIsInitializingDatabase(false)
+    }
+  }
+
+  const handleMigrateStockData = async () => {
+    setIsMigratingStock(true)
+    try {
+      const response = await fetch('/api/admin/migrate-stock', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        addToast({
+          title: 'Stock Data Migrated',
+          description: result.message || 'Stock data migrated successfully! Your inventory should now show correct values.',
+          type: 'success',
+        })
+        // Refresh the data
+        await refreshData()
+      } else {
+        addToast({
+          title: 'Migration Failed',
+          description: result.error || 'Failed to migrate stock data',
+          type: 'error',
+        })
+      }
+    } catch (error) {
+      addToast({
+        title: 'Migration Error',
+        description: 'Failed to migrate stock data',
+        type: 'error',
+      })
+    } finally {
+      setIsMigratingStock(false)
+    }
+  }
+
   const handleAdjustmentSuccess = () => {
-    refresh()
+    refreshData()
     addToast({
       type: 'success',
       title: "Stock Adjusted",
@@ -218,6 +316,15 @@ export default function InventoryPage() {
                 <Button 
                   variant="outline" 
                   size="sm" 
+                  onClick={() => setShowRobustDashboard(!showRobustDashboard)}
+                  className="bg-white hover:bg-slate-50 border-slate-300 text-slate-700 font-semibold shadow-sm hover:shadow-md transition-all duration-200"
+                >
+                  <BarChart3 className="w-4 h-4 mr-2" />
+                  {showRobustDashboard ? 'Classic View' : 'Robust Dashboard'}
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
                   className="bg-white hover:bg-slate-50 border-slate-300 text-slate-700 font-semibold shadow-sm hover:shadow-md transition-all duration-200"
                 >
                   <Download className="w-4 h-4 mr-2" />
@@ -239,8 +346,13 @@ export default function InventoryPage() {
             </div>
           </div>
 
-          {/* Refined Stats Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Robust Dashboard or Classic View */}
+          {showRobustDashboard ? (
+            <RobustInventoryDashboard />
+          ) : (
+            <>
+              {/* Refined Stats Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <Card className="relative overflow-hidden bg-white border border-slate-200/60 shadow-md hover:shadow-lg transition-all duration-300 group">
               <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-indigo-500/8"></div>
               <CardContent className="p-4">
@@ -471,50 +583,60 @@ export default function InventoryPage() {
                         <TableRow key={item.id} className="hover:bg-gradient-to-r hover:from-blue-50/30 hover:to-indigo-50/20 transition-all duration-200 border-b border-slate-100/60">
                           <TableCell className="py-4">
                             <div className="space-y-1">
-                              <div className="font-bold text-slate-900 text-sm">{item.product_name}</div>
-                              <div className="text-xs text-slate-600 font-medium">{item.sku} • {item.category_name}</div>
+                              <div className="font-bold text-slate-900 text-sm">{item.name}</div>
+                              <div className="text-xs text-slate-600 font-medium">{item.sku} • {item.category_name || 'Uncategorized'}</div>
                             </div>
                           </TableCell>
                           <TableCell className="py-4">
                             <div className="space-y-1">
                               <div className="flex items-center space-x-2">
-                                <span className="font-bold text-slate-900 text-base">{item.current_quantity}</span>
-                                {item.below_reorder_point && (
+                                <span className="font-bold text-slate-900 text-base">{item.physical_stock || 0}</span>
+                                {(() => {
+                                  const availableStock = item.available_stock !== undefined 
+                                    ? item.available_stock 
+                                    : (item.physical_stock || item.stock_quantity || 0) - (item.reserved_stock || 0);
+                                  return availableStock <= (item.reorder_point || 10);
+                                })() && (
                                   <AlertTriangle className="w-4 h-4 text-amber-500" />
                                 )}
                               </div>
                               <div className="text-xs text-slate-500 font-medium">
-                                Max: {item.max_stock_level}
+                                Max: {item.max_stock_level || 1000}
                               </div>
                             </div>
                           </TableCell>
                           <TableCell className="py-4">
-                            <div className="font-bold text-slate-900 text-base">{item.available_quantity}</div>
+                            <div className="font-bold text-slate-900 text-base">
+                              {item.available_stock !== undefined 
+                                ? item.available_stock 
+                                : (item.physical_stock || item.stock_quantity || 0) - (item.reserved_stock || 0)
+                              }
+                            </div>
                             <div className="text-xs text-slate-500 font-medium">Available</div>
                           </TableCell>
                           <TableCell className="py-4">
-                            <div className="font-bold text-slate-900 text-base">{item.reserved_quantity}</div>
+                            <div className="font-bold text-slate-900 text-base">{item.reserved_stock || 0}</div>
                             <div className="text-xs text-slate-500 font-medium">Reserved</div>
                           </TableCell>
                           <TableCell className="py-4">
-                            <div className="text-sm text-slate-700 font-semibold">{item.location}</div>
-                            <div className="text-xs text-slate-500 font-medium">{item.warehouse}</div>
+                            <div className="text-sm text-slate-700 font-semibold">Main Warehouse</div>
+                            <div className="text-xs text-slate-500 font-medium">Main Warehouse</div>
                           </TableCell>
                           <TableCell className="py-4">
-                            <div className="font-bold text-slate-900 text-base">{item.reorder_point}</div>
-                            <div className="text-xs text-slate-500 font-medium">Min: {item.min_stock_level}</div>
+                            <div className="font-bold text-slate-900 text-base">{item.reorder_point || 10}</div>
+                            <div className="text-xs text-slate-500 font-medium">Min: {item.min_stock_level || 5}</div>
                           </TableCell>
                           <TableCell className="py-4">
-                            <Badge className={`${getStatusColor(item.status)} font-semibold px-2 py-1 rounded-full shadow-sm`}>
+                            <Badge className={`${getStatusColor(getStockStatus(item))} font-semibold px-2 py-1 rounded-full shadow-sm`}>
                               <div className="flex items-center space-x-1">
-                                {getStatusIcon(item.status)}
-                                <span className="text-xs">{item.status.split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</span>
+                                {getStatusIcon(getStockStatus(item))}
+                                <span className="text-xs">{getStockStatus(item).split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</span>
                               </div>
                             </Badge>
                           </TableCell>
                           <TableCell className="py-4">
                             <div className="space-y-1">
-                              <div className="font-bold text-slate-900 text-sm">{item.total_value?.toLocaleString() || "0"} UGX</div>
+                              <div className="font-bold text-slate-900 text-sm">{((item.physical_stock || 0) * (item.unit_cost || 0)).toLocaleString()} UGX</div>
                               <div className="text-xs text-slate-600 font-medium">
                                 {item.unit_cost?.toLocaleString() || "0"} UGX cost • {item.unit_price?.toLocaleString() || "0"} UGX retail
                               </div>
@@ -522,7 +644,7 @@ export default function InventoryPage() {
                           </TableCell>
                           <TableCell className="py-4">
                             <div className="text-sm text-slate-700 font-semibold">
-                              {item.last_updated ? format(new Date(item.last_updated), "MMM dd, yyyy") : "Never"}
+                              {item.last_stock_update ? format(new Date(item.last_stock_update), "MMM dd, yyyy") : "Never"}
                             </div>
                           </TableCell>
                           <TableCell className="py-4">
@@ -646,44 +768,80 @@ export default function InventoryPage() {
                     </div>
                   </div>
                 </Button>
+
+                {/* Migrate Stock Data Button - show if stock values are zero */}
+                {inventory.some((item: any) => (item.physical_stock || 0) === 0 && (item.stock_quantity || 0) > 0) && (
+                  <Button 
+                    onClick={handleMigrateStockData}
+                    disabled={isMigratingStock}
+                    variant="outline" 
+                    className="justify-start h-auto p-4 bg-white hover:bg-gradient-to-br hover:from-blue-50 hover:to-indigo-50 hover:text-blue-700 border-slate-300 min-h-[90px] w-full rounded-lg shadow-sm hover:shadow-md transition-all duration-300 group"
+                  >
+                    <div className="flex items-start space-x-3 w-full">
+                      <div className="p-2 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-lg flex-shrink-0 shadow-sm group-hover:shadow-md transition-all duration-300">
+                        {isMigratingStock ? (
+                          <RefreshCw className="w-4 h-4 text-white animate-spin" />
+                        ) : (
+                          <Package className="w-4 h-4 text-white" />
+                        )}
+                      </div>
+                      <div className="text-left flex-1 overflow-hidden">
+                        <div className="font-bold text-slate-900 text-sm leading-tight mb-1">
+                          {isMigratingStock ? 'Migrating...' : 'Fix Stock Display'}
+                        </div>
+                        <div className="text-xs text-slate-600 leading-relaxed break-words font-medium">
+                          {isMigratingStock ? 'Copying stock data to new system' : 'Copy existing stock quantities to fix zero values'}
+                        </div>
+                      </div>
+                    </div>
+                  </Button>
+                )}
+
+                {/* Database Setup Button - show if robust inventory not set up or there are errors */}
+                {(!showRobustDashboard || error) && (
+                  <Button 
+                    onClick={handleInitializeDatabase}
+                    disabled={isInitializingDatabase}
+                    variant="outline" 
+                    className="justify-start h-auto p-4 bg-white hover:bg-gradient-to-br hover:from-green-50 hover:to-emerald-50 hover:text-green-700 border-slate-300 min-h-[90px] w-full rounded-lg shadow-sm hover:shadow-md transition-all duration-300 group"
+                  >
+                    <div className="flex items-start space-x-3 w-full">
+                      <div className="p-2 bg-gradient-to-br from-green-500 to-emerald-500 rounded-lg flex-shrink-0 shadow-sm group-hover:shadow-md transition-all duration-300">
+                        {isInitializingDatabase ? (
+                          <RefreshCw className="w-4 h-4 text-white animate-spin" />
+                        ) : (
+                          <Database className="w-4 h-4 text-white" />
+                        )}
+                      </div>
+                      <div className="text-left flex-1 overflow-hidden">
+                        <div className="font-bold text-slate-900 text-sm leading-tight mb-1">
+                          {isInitializingDatabase ? 'Setting Up...' : 'Setup Database'}
+                        </div>
+                        <div className="text-xs text-slate-600 leading-relaxed break-words font-medium">
+                          {isInitializingDatabase ? 'Initializing robust inventory system' : 'Enable stock adjustments & advanced features'}
+                        </div>
+                      </div>
+                    </div>
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>
 
-          {/* Refined Pagination */}
-          {totalPages > 1 && (
-            <Card className="bg-white border border-slate-200/60 shadow-lg rounded-xl overflow-hidden">
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className="text-sm text-slate-600 font-semibold">
-                    Showing {((currentPage - 1) * (filters.limit || 20)) + 1} to {Math.min(currentPage * (filters.limit || 20), totalItems)} of {totalItems} items
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handlePageChange(currentPage - 1)}
-                      disabled={currentPage <= 1}
-                      className="bg-white border-slate-300 text-slate-700 font-semibold shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
-                    >
-                      Previous
-                    </Button>
-                    <span className="text-sm text-slate-700 font-bold px-3 py-1 bg-slate-50 rounded-lg">
-                      Page {currentPage} of {totalPages}
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handlePageChange(currentPage + 1)}
-                      disabled={currentPage >= totalPages}
-                      className="bg-white border-slate-300 text-slate-700 font-semibold shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
-                    >
-                      Next
-                    </Button>
-                  </div>
+          {/* Inventory Summary */}
+          <Card className="bg-white border border-slate-200/60 shadow-lg rounded-xl overflow-hidden">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-slate-600 font-semibold">
+                  Showing {totalItems} inventory items
                 </div>
-              </CardContent>
-            </Card>
+                <div className="text-sm text-slate-600 font-semibold">
+                  Last updated: {new Date().toLocaleString()}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+            </>
           )}
         </div>
       </div>

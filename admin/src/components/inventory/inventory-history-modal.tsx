@@ -26,7 +26,7 @@ import {
   Search,
   Filter
 } from "lucide-react"
-import { useInventoryHistory } from "@/hooks/use-enhanced-inventory"
+import { useRobustInventory } from "@/hooks/use-robust-inventory"
 import { format } from "date-fns"
 
 interface InventoryHistoryModalProps {
@@ -49,13 +49,7 @@ export function InventoryHistoryModal({ isOpen, onClose, product }: InventoryHis
     sort_order: 'desc' as 'asc' | 'desc',
   })
 
-  const { data, loading, error, refresh } = useInventoryHistory({
-    filters: {
-      product_id: product?.id,
-      ...filters,
-    },
-    autoRefresh: false,
-  })
+  const { auditLogs, loading, error, refreshData } = useRobustInventory()
 
   const handleFilterChange = (key: string, value: string) => {
     setFilters(prev => ({ ...prev, [key]: value }))
@@ -208,7 +202,7 @@ export function InventoryHistoryModal({ isOpen, onClose, product }: InventoryHis
           </div>
           
           <div className="flex gap-2">
-            <Button onClick={refresh} variant="outline" size="sm">
+            <Button onClick={refreshData} variant="outline" size="sm">
               <Search className="w-4 h-4 mr-2" />
               Apply Filters
             </Button>
@@ -219,29 +213,23 @@ export function InventoryHistoryModal({ isOpen, onClose, product }: InventoryHis
         </div>
 
         {/* Summary */}
-        {data?.summary && (
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        {auditLogs && auditLogs.length > 0 && (
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <div className="bg-blue-50 p-3 rounded-lg text-center">
-              <div className="text-2xl font-bold text-blue-600">{data.summary.total_adjustments}</div>
-              <div className="text-sm text-blue-700">Total Adjustments</div>
+              <div className="text-2xl font-bold text-blue-600">{auditLogs.length}</div>
+              <div className="text-sm text-blue-700">Total Entries</div>
             </div>
             <div className="bg-green-50 p-3 rounded-lg text-center">
-              <div className="text-2xl font-bold text-green-600">{data.summary.total_increases}</div>
-              <div className="text-sm text-green-700">Increases</div>
+              <div className="text-2xl font-bold text-green-600">
+                {auditLogs.filter(log => log.physical_stock_change > 0).length}
+              </div>
+              <div className="text-sm text-green-700">Stock Increases</div>
             </div>
             <div className="bg-red-50 p-3 rounded-lg text-center">
-              <div className="text-2xl font-bold text-red-600">{data.summary.total_decreases}</div>
-              <div className="text-sm text-red-700">Decreases</div>
-            </div>
-            <div className="bg-purple-50 p-3 rounded-lg text-center">
-              <div className="text-2xl font-bold text-purple-600">{data.summary.total_sets}</div>
-              <div className="text-sm text-purple-700">Sets</div>
-            </div>
-            <div className="bg-gray-50 p-3 rounded-lg text-center">
-              <div className={`text-2xl font-bold ${data.summary.net_quantity_change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {data.summary.net_quantity_change >= 0 ? '+' : ''}{data.summary.net_quantity_change}
+              <div className="text-2xl font-bold text-red-600">
+                {auditLogs.filter(log => log.physical_stock_change < 0).length}
               </div>
-              <div className="text-sm text-gray-700">Net Change</div>
+              <div className="text-sm text-red-700">Stock Decreases</div>
             </div>
           </div>
         )}
@@ -257,7 +245,7 @@ export function InventoryHistoryModal({ isOpen, onClose, product }: InventoryHis
             <div className="text-center py-8">
               <p className="text-red-600">Error loading history: {error}</p>
             </div>
-          ) : !data?.adjustments.length ? (
+          ) : !auditLogs?.length ? (
             <div className="text-center py-8">
               <History className="w-12 h-12 text-gray-400 mx-auto mb-4" />
               <p className="text-gray-600">No inventory history found</p>
@@ -278,64 +266,64 @@ export function InventoryHistoryModal({ isOpen, onClose, product }: InventoryHis
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data.adjustments.map((adjustment) => (
-                  <TableRow key={adjustment.id}>
+                {auditLogs?.filter(log => product ? log.product_id === product.id : true).map((log) => (
+                  <TableRow key={log.id}>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Calendar className="w-4 h-4 text-gray-400" />
                         <div>
                           <div className="font-medium">
-                            {format(new Date(adjustment.created_at), 'MMM dd, yyyy')}
+                            {format(new Date(log.created_at), 'MMM dd, yyyy')}
                           </div>
                           <div className="text-sm text-gray-500">
-                            {format(new Date(adjustment.created_at), 'HH:mm:ss')}
+                            {format(new Date(log.created_at), 'HH:mm:ss')}
                           </div>
                         </div>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge className={getAdjustmentColor(adjustment.adjustment_type)}>
+                      <Badge className={getAdjustmentColor(log.operation_type)}>
                         <div className="flex items-center gap-1">
-                          {getAdjustmentIcon(adjustment.adjustment_type)}
-                          {adjustment.adjustment_type}
+                          {getAdjustmentIcon(log.operation_type)}
+                          {log.operation_type}
                         </div>
                       </Badge>
                     </TableCell>
                     <TableCell className="font-medium">
-                      {adjustment.quantity_before}
+                      {log.physical_stock_before}
                     </TableCell>
                     <TableCell className="font-medium">
-                      {adjustment.quantity_after}
+                      {log.physical_stock_after}
                     </TableCell>
                     <TableCell>
-                      <span className={`font-medium ${getQuantityChangeColor(adjustment.quantity_change)}`}>
-                        {adjustment.quantity_change >= 0 ? '+' : ''}{adjustment.quantity_change}
+                      <span className={`font-medium ${getQuantityChangeColor(log.physical_stock_change)}`}>
+                        {log.physical_stock_change >= 0 ? '+' : ''}{log.physical_stock_change}
                       </span>
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline">
-                        {adjustment.reason}
+                        {log.operation_reason || 'N/A'}
                       </Badge>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <User className="w-4 h-4 text-gray-400" />
-                        <span className="text-sm">{adjustment.user_name}</span>
+                        <span className="text-sm">System</span>
                       </div>
                     </TableCell>
                     <TableCell>
-                      {adjustment.reference ? (
-                        <Badge variant="secondary">{adjustment.reference}</Badge>
+                      {log.order_id ? (
+                        <Badge variant="secondary">Order #{log.order_id.slice(-8)}</Badge>
                       ) : (
                         <span className="text-gray-400">-</span>
                       )}
                     </TableCell>
                     <TableCell>
-                      {adjustment.notes ? (
+                      {log.notes ? (
                         <div className="flex items-center gap-2">
                           <FileText className="w-4 h-4 text-gray-400" />
-                          <span className="text-sm max-w-32 truncate" title={adjustment.notes}>
-                            {adjustment.notes}
+                          <span className="text-sm max-w-32 truncate" title={log.notes}>
+                            {log.notes}
                           </span>
                         </div>
                       ) : (
@@ -350,30 +338,10 @@ export function InventoryHistoryModal({ isOpen, onClose, product }: InventoryHis
         </div>
 
         {/* Pagination */}
-        {data?.pagination && data.pagination.total_pages > 1 && (
+        {auditLogs && auditLogs.length > 0 && (
           <div className="flex items-center justify-between pt-4 border-t">
             <div className="text-sm text-gray-600">
-              Showing {((data.pagination.page - 1) * data.pagination.limit) + 1} to{' '}
-              {Math.min(data.pagination.page * data.pagination.limit, data.pagination.total)} of{' '}
-              {data.pagination.total} results
-            </div>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!data.pagination.has_prev}
-                onClick={() => handleFilterChange('page', (data.pagination.page - 1).toString())}
-              >
-                Previous
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!data.pagination.has_next}
-                onClick={() => handleFilterChange('page', (data.pagination.page + 1).toString())}
-              >
-                Next
-              </Button>
+              Showing {auditLogs.length} audit log entries
             </div>
           </div>
         )}

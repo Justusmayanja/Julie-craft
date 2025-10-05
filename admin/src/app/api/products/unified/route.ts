@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
       .from('products')
       .select(`
         *,
-        inventory:inventory!left(
+        inventory!left(
           id,
           current_stock,
           min_stock,
@@ -57,11 +57,11 @@ export async function GET(request: NextRequest) {
           total_value,
           last_restocked,
           supplier,
-          status as inventory_status,
+          status,
           movement_trend,
           notes,
-          created_at as inventory_created_at,
-          updated_at as inventory_updated_at
+          created_at,
+          updated_at
         )
       `)
 
@@ -138,11 +138,11 @@ export async function GET(request: NextRequest) {
         total_value: inventory?.total_value ?? (product.cost_price * (inventory?.current_stock ?? product.stock_quantity ?? 0)),
         last_restocked: inventory?.last_restocked,
         supplier: inventory?.supplier,
-        inventory_status: inventory?.inventory_status ?? (inventory?.current_stock === 0 ? 'out_of_stock' : inventory?.current_stock <= inventory?.min_stock ? 'low_stock' : 'in_stock'),
+        inventory_status: inventory?.status ?? (inventory?.current_stock === 0 ? 'out_of_stock' : inventory?.current_stock <= inventory?.min_stock ? 'low_stock' : 'in_stock'),
         movement_trend: inventory?.movement_trend ?? 'stable',
         inventory_notes: inventory?.notes,
-        inventory_created_at: inventory?.inventory_created_at,
-        inventory_updated_at: inventory?.inventory_updated_at,
+        inventory_created_at: inventory?.created_at,
+        inventory_updated_at: inventory?.updated_at,
         
         // Consistency flags
         has_inventory_record: !!inventory,

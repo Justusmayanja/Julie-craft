@@ -22,24 +22,23 @@ import {
 } from "@/components/ui/table"
 import { 
   Search, 
-  Filter, 
   Download, 
-  Plus,
   AlertTriangle,
   Package,
-  TrendingDown,
-  TrendingUp,
   Warehouse,
   RefreshCw,
   Edit,
   Eye,
-  MoreHorizontal,
   BarChart3,
   DollarSign,
   ArrowUpDown,
-  Settings
+  Settings,
+  X
 } from "lucide-react"
-import { useProductsInventory, useProductsInventoryStats } from "@/hooks/use-products-inventory"
+import { useEnhancedInventory } from "@/hooks/use-enhanced-inventory"
+import { StockAdjustmentModal } from "@/components/inventory/stock-adjustment-modal"
+import { InventoryHistoryModal } from "@/components/inventory/inventory-history-modal"
+import { StockAlertSettings } from "@/components/inventory/stock-alert-settings"
 import { useToast } from "@/components/ui/toast"
 import { format } from "date-fns"
 
@@ -52,19 +51,13 @@ const statusOptions = [
   { value: "discontinued", label: "Discontinued" }
 ]
 
-const movementOptions = [
-  { value: "all", label: "All Movement" },
-  { value: "increasing", label: "Increasing" },
-  { value: "decreasing", label: "Decreasing" },
-  { value: "stable", label: "Stable" }
-]
 
 const sortOptions = [
   { value: "product_name", label: "Product Name" },
-  { value: "current_stock", label: "Stock Level" },
+  { value: "current_quantity", label: "Stock Level" },
   { value: "total_value", label: "Total Value" },
-  { value: "last_restocked", label: "Last Restocked" },
-  { value: "created_at", label: "Date Added" }
+  { value: "last_updated", label: "Last Updated" },
+  { value: "reorder_point", label: "Reorder Point" }
 ]
 
 const getStatusColor = (status: string) => {
@@ -87,48 +80,45 @@ const getStatusIcon = (status: string) => {
   }
 }
 
-const getMovementIcon = (movement: string) => {
-  switch (movement) {
-    case "increasing": return <TrendingUp className="w-4 h-4 text-green-500" />
-    case "decreasing": return <TrendingDown className="w-4 h-4 text-red-500" />
-    case "stable": return <div className="w-4 h-4 rounded-full bg-gray-400"></div>
-    default: return <div className="w-4 h-4 rounded-full bg-gray-400"></div>
-  }
-}
 
 export default function InventoryPage() {
   const [filters, setFilters] = useState({
     search: "",
-    status: undefined,
-    low_stock: false,
-    out_of_stock: false,
-    sort_by: "product_name",
-    sort_order: "asc",
+    status: "all" as const,
+    location: "",
+    category_id: "",
+    sort_by: "product_name" as const,
+    sort_order: "asc" as const,
     page: 1,
     limit: 20,
+    show_low_stock_only: false,
+    show_out_of_stock_only: false,
   })
 
-  // Use products-based inventory data
-  const { data: inventoryData, loading, error, refresh } = useProductsInventory({
+  const [selectedProduct, setSelectedProduct] = useState<any>(null)
+  const [showAdjustmentModal, setShowAdjustmentModal] = useState(false)
+  const [showHistoryModal, setShowHistoryModal] = useState(false)
+  const [showAlertSettings, setShowAlertSettings] = useState(false)
+
+  // Use enhanced inventory data
+  const { data: inventoryData, loading, error, refresh } = useEnhancedInventory({
     filters,
     autoRefresh: true,
     refreshInterval: 300000 // 5 minutes
   })
 
-  const { stats, loading: statsLoading } = useProductsInventoryStats()
   const { addToast } = useToast()
 
   // Computed values
   const inventory = inventoryData?.items || []
-  const totalItems = inventoryData?.total || stats.total_items || inventory.length
-  const totalPages = inventoryData?.total_pages || 0
-  const currentPage = inventoryData?.page || 1
-  
-  // Calculate stats from inventory data if stats API fails
-  const lowStockCount = stats.low_stock_items || inventory.filter(item => item.status === 'low_stock').length
-  const outOfStockCount = stats.out_of_stock_items || inventory.filter(item => item.status === 'out_of_stock').length
-  const totalValue = stats.total_value || inventory.reduce((sum, item) => sum + (item.total_value || 0), 0)
-  const avgStockLevel = stats.avg_stock_level || (totalItems > 0 ? ((totalItems - lowStockCount - outOfStockCount) / totalItems) * 100 : 0)
+  const summary = inventoryData?.summary
+  const totalItems = summary?.total_items || 0
+  const totalPages = inventoryData?.pagination?.total_pages || 0
+  const currentPage = inventoryData?.pagination?.page || 1
+  const lowStockCount = summary?.low_stock || 0
+  const outOfStockCount = summary?.out_of_stock || 0
+  const totalValue = summary?.total_value || 0
+  const avgStockLevel = totalItems > 0 ? ((totalItems - lowStockCount - outOfStockCount) / totalItems) * 100 : 0
 
   // Handle filter changes
   const updateFilter = (key: string, value: string | number | boolean | undefined) => {
@@ -144,11 +134,15 @@ export default function InventoryPage() {
   }
 
   const handleStatusFilter = (value: string) => {
-    updateFilter("status", value === "all" ? undefined : value)
+    updateFilter("status", value)
   }
 
-  const handleMovementFilter = (value: string) => {
-    updateFilter("movement_trend", value === "all" ? undefined : value)
+  const handleLocationFilter = (value: string) => {
+    updateFilter("location", value === "all" ? "" : value)
+  }
+
+  const handleCategoryFilter = (value: string) => {
+    updateFilter("category_id", value === "all" ? "" : value)
   }
 
   const handleSort = (sortBy: string) => {
@@ -156,8 +150,15 @@ export default function InventoryPage() {
     const newOrder = currentSort === sortBy && filters.sort_order === "asc" ? "desc" : "asc"
     setFilters(prev => ({
       ...prev,
-      sort_by: sortBy,
-      sort_order: newOrder
+      sort_by: sortBy as any,
+      sort_order: newOrder as any
+    }))
+  }
+
+  const handleSortSelect = (value: string) => {
+    setFilters(prev => ({
+      ...prev,
+      sort_by: value as any
     }))
   }
 
@@ -174,197 +175,249 @@ export default function InventoryPage() {
     })
   }
 
+  const handleAdjustStock = (product: any) => {
+    setSelectedProduct(product)
+    setShowAdjustmentModal(true)
+  }
+
+  const handleViewHistory = (product: any) => {
+    setSelectedProduct(product)
+    setShowHistoryModal(true)
+  }
+
+  const handleAdjustmentSuccess = () => {
+    refresh()
+    addToast({
+      type: 'success',
+      title: "Stock Adjusted",
+      description: "Inventory has been updated successfully.",
+    })
+  }
+
   return (
-    <div className="h-full">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="space-y-6">
-          {/* Page Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900 tracking-tight">JulieCraft Inventory</h1>
-              <p className="text-gray-600 mt-1 text-base">Track stock levels and manage inventory replenishment</p>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-2">
-              <Button variant="outline" size="sm" className="bg-white hover:bg-gray-50 border-gray-300">
-                <Download className="w-4 h-4 mr-2" />
-                Export
-              </Button>
-              <Button variant="outline" size="sm" className="bg-white hover:bg-blue-50 hover:text-blue-700 border-gray-300">
-                <RefreshCw className="w-4 h-4 mr-2" />
-                Sync Stock
-              </Button>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="space-y-8">
+          {/* Refined Page Header */}
+          <div className="bg-white rounded-xl shadow-lg border border-slate-200/60 p-6">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-lg shadow-md">
+                    <Package className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h1 className="text-2xl font-bold bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">
+                      Inventory Management
+                    </h1>
+                    <p className="text-slate-600 text-sm font-medium">Professional stock control & analytics</p>
+                  </div>
+                </div>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="bg-white hover:bg-slate-50 border-slate-300 text-slate-700 font-semibold shadow-sm hover:shadow-md transition-all duration-200"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Export Data
+                </Button>
+                <Button 
+                  size="sm" 
+                  className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold shadow-md hover:shadow-lg transition-all duration-200"
+                  onClick={() => addToast({
+                    type: 'info',
+                    title: "Sync Initiated",
+                    description: "Inventory sync with products table started. This may take a moment.",
+                  })}
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Sync Stock
+                </Button>
+              </div>
             </div>
           </div>
 
-          {/* Stats Cards */}
+          {/* Refined Stats Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card className="relative overflow-hidden bg-white border-0 shadow-md hover:shadow-lg transition-all duration-300 group">
-              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-blue-600/10"></div>
+            <Card className="relative overflow-hidden bg-white border border-slate-200/60 shadow-md hover:shadow-lg transition-all duration-300 group">
+              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-indigo-500/8"></div>
               <CardContent className="p-4">
                 <div className="flex items-center justify-between mb-3">
-                  <div className="p-1.5 bg-blue-100 rounded-lg group-hover:bg-blue-200 transition-colors">
-                    <Warehouse className="h-4 w-4 text-blue-600" />
+                  <div className="p-2 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-lg shadow-sm group-hover:shadow-md transition-all duration-300">
+                    <Package className="h-4 w-4 text-white" />
                   </div>
-                  {loading && <RefreshCw className="h-4 w-4 text-gray-400 animate-spin" />}
+                  {loading && <RefreshCw className="h-4 w-4 text-slate-400 animate-spin" />}
                 </div>
                 <div className="space-y-1">
-                  <p className="text-xs font-medium text-gray-600">Total Items</p>
-                  <p className="text-xl font-bold text-gray-900">{totalItems}</p>
-                  <p className="text-xs text-gray-500">Inventory items</p>
+                  <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Total Items</p>
+                  <p className="text-2xl font-bold text-slate-900">{totalItems}</p>
+                  <p className="text-xs text-slate-500 font-medium">Active inventory items</p>
                 </div>
               </CardContent>
             </Card>
 
-            <Card className="relative overflow-hidden bg-white border-0 shadow-md hover:shadow-lg transition-all duration-300 group">
-              <div className="absolute inset-0 bg-gradient-to-br from-red-500/5 to-red-600/10"></div>
+            <Card className="relative overflow-hidden bg-white border border-slate-200/60 shadow-md hover:shadow-lg transition-all duration-300 group">
+              <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-orange-500/8"></div>
               <CardContent className="p-4">
                 <div className="flex items-center justify-between mb-3">
-                  <div className="p-1.5 bg-red-100 rounded-lg group-hover:bg-red-200 transition-colors">
-                    <AlertTriangle className="h-4 w-4 text-red-600" />
+                  <div className="p-2 bg-gradient-to-br from-amber-500 to-orange-500 rounded-lg shadow-sm group-hover:shadow-md transition-all duration-300">
+                    <AlertTriangle className="h-4 w-4 text-white" />
                   </div>
-                  {loading && <RefreshCw className="h-4 w-4 text-gray-400 animate-spin" />}
+                  {loading && <RefreshCw className="h-4 w-4 text-slate-400 animate-spin" />}
                 </div>
                 <div className="space-y-1">
-                  <p className="text-xs font-medium text-gray-600">Low Stock Alerts</p>
-                  <p className="text-xl font-bold text-gray-900">{lowStockCount}</p>
-                  <p className="text-xs text-gray-500">Need restocking</p>
+                  <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Low Stock Alerts</p>
+                  <p className="text-2xl font-bold text-slate-900">{lowStockCount}</p>
+                  <p className="text-xs text-slate-500 font-medium">Require attention</p>
                 </div>
               </CardContent>
             </Card>
 
-            <Card className="relative overflow-hidden bg-white border-0 shadow-md hover:shadow-lg transition-all duration-300 group">
-              <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-emerald-600/10"></div>
+            <Card className="relative overflow-hidden bg-white border border-slate-200/60 shadow-md hover:shadow-lg transition-all duration-300 group">
+              <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-green-500/8"></div>
               <CardContent className="p-4">
                 <div className="flex items-center justify-between mb-3">
-                  <div className="p-1.5 bg-emerald-100 rounded-lg group-hover:bg-emerald-200 transition-colors">
-                    <DollarSign className="h-4 w-4 text-emerald-600" />
+                  <div className="p-2 bg-gradient-to-br from-emerald-500 to-green-500 rounded-lg shadow-sm group-hover:shadow-md transition-all duration-300">
+                    <DollarSign className="h-4 w-4 text-white" />
                   </div>
-                  {loading && <RefreshCw className="h-4 w-4 text-gray-400 animate-spin" />}
+                  {loading && <RefreshCw className="h-4 w-4 text-slate-400 animate-spin" />}
                 </div>
                 <div className="space-y-1">
-                  <p className="text-xs font-medium text-gray-600">Total Value</p>
-                  <p className="text-xl font-bold text-gray-900">{totalValue.toLocaleString()} UGX</p>
-                  <p className="text-xs text-gray-500">Inventory value</p>
+                  <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Total Value</p>
+                  <p className="text-2xl font-bold text-slate-900">{totalValue.toLocaleString()} UGX</p>
+                  <p className="text-xs text-slate-500 font-medium">Inventory worth</p>
                 </div>
               </CardContent>
             </Card>
 
-            <Card className="relative overflow-hidden bg-white border-0 shadow-md hover:shadow-lg transition-all duration-300 group">
-              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-blue-600/10"></div>
+            <Card className="relative overflow-hidden bg-white border border-slate-200/60 shadow-md hover:shadow-lg transition-all duration-300 group">
+              <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-violet-500/8"></div>
               <CardContent className="p-4">
                 <div className="flex items-center justify-between mb-3">
-                  <div className="p-1.5 bg-blue-100 rounded-lg group-hover:bg-blue-200 transition-colors">
-                    <BarChart3 className="h-4 w-4 text-blue-600" />
+                  <div className="p-2 bg-gradient-to-br from-purple-500 to-violet-500 rounded-lg shadow-sm group-hover:shadow-md transition-all duration-300">
+                    <BarChart3 className="h-4 w-4 text-white" />
                   </div>
-                  {loading && <RefreshCw className="h-4 w-4 text-gray-400 animate-spin" />}
+                  {loading && <RefreshCw className="h-4 w-4 text-slate-400 animate-spin" />}
                 </div>
                 <div className="space-y-1">
-                  <p className="text-xs font-medium text-gray-600">Avg Stock Level</p>
-                  <p className="text-xl font-bold text-gray-900">{avgStockLevel.toFixed(1)}%</p>
-                  <p className="text-xs text-gray-500">Of maximum capacity</p>
+                  <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Stock Level</p>
+                  <p className="text-2xl font-bold text-slate-900">{avgStockLevel.toFixed(1)}%</p>
+                  <p className="text-xs text-slate-500 font-medium">Average capacity</p>
                 </div>
               </CardContent>
             </Card>
           </div>
 
-          {/* Inventory Table */}
-          <Card className="bg-white border-0 shadow-lg">
-            <CardHeader className="border-b border-gray-100 pb-4">
-              <CardTitle className="text-lg font-semibold text-gray-900 mb-4">Stock Management</CardTitle>
-              
-              {/* Search and Filters Row */}
-              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                {/* Search */}
-                <div className="relative flex-shrink-0">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                  <Input
-                    placeholder="Search inventory..."
-                    value={filters.search || ""}
-                    onChange={(e) => handleSearch(e.target.value)}
-                    className="pl-10 w-full sm:w-80 bg-white border-gray-300 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-500"
-                  />
+          {/* Refined Inventory Table */}
+          <Card className="bg-white border border-slate-200/60 shadow-lg rounded-xl overflow-hidden">
+            <CardHeader className="bg-gradient-to-r from-slate-50 to-blue-50 border-b border-slate-200/60 p-6">
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <CardTitle className="text-xl font-bold text-slate-900">Stock Management</CardTitle>
+                  <p className="text-slate-600 text-sm font-medium">Monitor and control your inventory levels</p>
                 </div>
+              
+                {/* Professional Search and Filters */}
+                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                  {/* Refined Search */}
+                  <div className="relative flex-shrink-0">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
+                    <Input
+                      placeholder="Search products, SKU, or categories..."
+                      value={filters.search || ""}
+                      onChange={(e) => handleSearch(e.target.value)}
+                      className="pl-10 pr-3 py-2 w-full sm:w-80 bg-white border-slate-300 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900 placeholder-slate-500 font-medium rounded-lg shadow-sm"
+                    />
+                  </div>
                 
-                {/* Filters */}
-                <div className="flex flex-wrap gap-2">
-                  <Select value={filters.status || "all"} onValueChange={handleStatusFilter}>
-                    <SelectTrigger className="w-[140px] bg-white border-gray-300 text-gray-900">
-                      <SelectValue placeholder="Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {statusOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  {/* Refined Filters */}
+                  <div className="flex flex-wrap gap-2">
+                    <Select value={filters.status || "all"} onValueChange={handleStatusFilter}>
+                      <SelectTrigger className="w-[140px] bg-white border-slate-300 text-slate-900 focus:ring-blue-500/20 focus:border-blue-500 font-medium rounded-lg shadow-sm">
+                        <SelectValue placeholder="Stock Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {statusOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
 
-                  <Select value={filters.movement_trend || "all"} onValueChange={handleMovementFilter}>
-                    <SelectTrigger className="w-[140px] bg-white border-gray-300 text-gray-900">
-                      <SelectValue placeholder="Movement" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {movementOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    <Select value={filters.location || "all"} onValueChange={handleLocationFilter}>
+                      <SelectTrigger className="w-[140px] bg-white border-slate-300 text-slate-900 focus:ring-blue-500/20 focus:border-blue-500 font-medium rounded-lg shadow-sm">
+                        <SelectValue placeholder="Location" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Locations</SelectItem>
+                        <SelectItem value="Main Warehouse">Main Warehouse</SelectItem>
+                        <SelectItem value="Secondary Storage">Secondary Storage</SelectItem>
+                        <SelectItem value="Retail Store">Retail Store</SelectItem>
+                      </SelectContent>
+                    </Select>
 
-                  <Select value={filters.sort_by || "product_name"} onValueChange={handleSort}>
-                    <SelectTrigger className="w-[140px] bg-white border-gray-300 text-gray-900">
-                      <SelectValue placeholder="Sort by" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {sortOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    <Select value={filters.sort_by || "product_name"} onValueChange={handleSortSelect}>
+                      <SelectTrigger className="w-[140px] bg-white border-slate-300 text-slate-900 focus:ring-blue-500/20 focus:border-blue-500 font-medium rounded-lg shadow-sm">
+                        <SelectValue placeholder="Sort by" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {sortOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
 
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setFilters({
-                      search: "",
-                      status: undefined,
-                      movement_trend: undefined,
-                      sort_by: "product_name",
-                      sort_order: "asc",
-                      page: 1,
-                      limit: 20,
-                    })}
-                    className="bg-white hover:bg-gray-50 border-gray-300 text-gray-900 hover:text-gray-900"
-                  >
-                    <Filter className="w-4 h-4 mr-2" />
-                    Clear
-                  </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setFilters({
+                        search: "",
+                        status: "all" as const,
+                        location: "",
+                        category_id: "",
+                        sort_by: "product_name" as const,
+                        sort_order: "asc" as const,
+                        page: 1,
+                        limit: 20,
+                        show_low_stock_only: false,
+                        show_out_of_stock_only: false,
+                      })}
+                      className="bg-white hover:bg-slate-50 border-slate-300 text-slate-900 hover:text-slate-900 font-semibold rounded-lg shadow-sm"
+                    >
+                      <X className="w-4 h-4 mr-1" />
+                      Clear Filters
+                    </Button>
+                  </div>
                 </div>
               </div>
             </CardHeader>
-        
             <CardContent className="p-0">
-              {/* Loading State */}
+              {/* Professional Loading State */}
               {loading && (
-                <div className="text-center py-12 px-4">
-                  <RefreshCw className="w-8 h-8 text-gray-400 mx-auto mb-4 animate-spin" />
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Loading inventory...</h3>
-                  <p className="text-gray-600">Please wait while we fetch your inventory data</p>
+                <div className="text-center py-16 px-4">
+                  <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-2xl mb-6 shadow-lg">
+                    <RefreshCw className="w-8 h-8 text-white animate-spin" />
+                  </div>
+                  <h3 className="text-xl font-bold text-slate-900 mb-3">Loading Inventory</h3>
+                  <p className="text-slate-600 font-medium">Fetching your latest stock data...</p>
                 </div>
               )}
 
-              {/* Error State */}
+              {/* Professional Error State */}
               {error && (
-                <div className="text-center py-12 px-4">
-                  <AlertTriangle className="w-16 h-16 text-red-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Error loading inventory</h3>
-                  <p className="text-gray-600 mb-4">{error}</p>
-                  <Button onClick={handleRefresh} variant="outline">
-                    <RefreshCw className="w-4 h-4 mr-2" />
+                <div className="text-center py-16 px-4">
+                  <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-red-500 to-rose-500 rounded-2xl mb-6 shadow-lg">
+                    <AlertTriangle className="w-8 h-8 text-white" />
+                  </div>
+                  <h3 className="text-xl font-bold text-slate-900 mb-3">Unable to Load Inventory</h3>
+                  <p className="text-slate-600 font-medium mb-6">{error}</p>
+                  <Button onClick={handleRefresh} variant="outline" size="lg" className="bg-white hover:bg-slate-50 border-slate-300 text-slate-700 font-semibold shadow-sm">
+                    <RefreshCw className="w-5 h-5 mr-2" />
                     Try Again
                   </Button>
                 </div>
@@ -375,125 +428,122 @@ export default function InventoryPage() {
                 <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
-                      <TableRow className="bg-gray-50/50">
-                        <TableHead className="font-semibold text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort("product_name")}>
+                      <TableRow className="bg-gradient-to-r from-slate-50 to-blue-50/30 border-b border-slate-200/60">
+                        <TableHead className="font-bold text-slate-900 py-4 text-xs uppercase tracking-wide cursor-pointer hover:bg-slate-100/50 transition-colors" onClick={() => handleSort("product_name")}>
                           <div className="flex items-center space-x-1">
-                            <span>Product</span>
-                            <ArrowUpDown className="w-3 h-3" />
+                            <span>Product / SKU</span>
+                            <ArrowUpDown className="w-3 h-3 text-slate-500" />
                           </div>
                         </TableHead>
-                        <TableHead className="font-semibold text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort("current_stock")}>
+                        <TableHead className="font-bold text-slate-900 py-4 text-xs uppercase tracking-wide cursor-pointer hover:bg-slate-100/50 transition-colors" onClick={() => handleSort("current_quantity")}>
                           <div className="flex items-center space-x-1">
-                            <span>Stock Level</span>
-                            <ArrowUpDown className="w-3 h-3" />
+                            <span>On Hand</span>
+                            <ArrowUpDown className="w-3 h-3 text-slate-500" />
                           </div>
                         </TableHead>
-                        <TableHead className="font-semibold text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort("status")}>
+                        <TableHead className="font-bold text-slate-900 py-4 text-xs uppercase tracking-wide">Available</TableHead>
+                        <TableHead className="font-bold text-slate-900 py-4 text-xs uppercase tracking-wide">Reserved</TableHead>
+                        <TableHead className="font-bold text-slate-900 py-4 text-xs uppercase tracking-wide">Location</TableHead>
+                        <TableHead className="font-bold text-slate-900 py-4 text-xs uppercase tracking-wide">Reorder Point</TableHead>
+                        <TableHead className="font-bold text-slate-900 py-4 text-xs uppercase tracking-wide cursor-pointer hover:bg-slate-100/50 transition-colors" onClick={() => handleSort("status")}>
                           <div className="flex items-center space-x-1">
                             <span>Status</span>
-                            <ArrowUpDown className="w-3 h-3" />
+                            <ArrowUpDown className="w-3 h-3 text-slate-500" />
                           </div>
                         </TableHead>
-                        <TableHead className="font-semibold text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort("movement_trend")}>
-                          <div className="flex items-center space-x-1">
-                            <span>Movement</span>
-                            <ArrowUpDown className="w-3 h-3" />
-                          </div>
-                        </TableHead>
-                        <TableHead className="font-semibold text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort("total_value")}>
+                        <TableHead className="font-bold text-slate-900 py-4 text-xs uppercase tracking-wide cursor-pointer hover:bg-slate-100/50 transition-colors" onClick={() => handleSort("total_value")}>
                           <div className="flex items-center space-x-1">
                             <span>Value</span>
-                            <ArrowUpDown className="w-3 h-3" />
+                            <ArrowUpDown className="w-3 h-3 text-slate-500" />
                           </div>
                         </TableHead>
-                        <TableHead className="font-semibold text-gray-700">Supplier</TableHead>
-                        <TableHead className="font-semibold text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort("last_restocked")}>
+                        <TableHead className="font-bold text-slate-900 py-4 text-xs uppercase tracking-wide cursor-pointer hover:bg-slate-100/50 transition-colors" onClick={() => handleSort("last_updated")}>
                           <div className="flex items-center space-x-1">
-                            <span>Last Restocked</span>
-                            <ArrowUpDown className="w-3 h-3" />
+                            <span>Last Updated</span>
+                            <ArrowUpDown className="w-3 h-3 text-slate-500" />
                           </div>
                         </TableHead>
-                        <TableHead className="w-24 font-semibold text-gray-700">Actions</TableHead>
+                        <TableHead className="w-32 font-bold text-slate-900 py-4 text-xs uppercase tracking-wide">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {inventory.map((item: InventoryItem) => (
-                        <TableRow key={item.id} className="hover:bg-gray-50/50 transition-colors">
+                      {inventory.map((item: any) => (
+                        <TableRow key={item.id} className="hover:bg-gradient-to-r hover:from-blue-50/30 hover:to-indigo-50/20 transition-all duration-200 border-b border-slate-100/60">
                           <TableCell className="py-4">
-                            <div>
-                              <div className="font-semibold text-gray-900">{item.product_name}</div>
-                              <div className="text-sm text-gray-600">{item.sku} • {item.category_name}</div>
+                            <div className="space-y-1">
+                              <div className="font-bold text-slate-900 text-sm">{item.product_name}</div>
+                              <div className="text-xs text-slate-600 font-medium">{item.sku} • {item.category_name}</div>
                             </div>
                           </TableCell>
                           <TableCell className="py-4">
-                            <div className="space-y-2">
+                            <div className="space-y-1">
                               <div className="flex items-center space-x-2">
-                                <span className="font-semibold text-gray-900">{item.current_stock}</span>
-                                <span className="text-sm text-gray-500">/ {item.max_stock}</span>
-                                {item.current_stock <= item.reorder_point && (
-                                  <AlertTriangle className="w-4 h-4 text-red-500" />
+                                <span className="font-bold text-slate-900 text-base">{item.current_quantity}</span>
+                                {item.below_reorder_point && (
+                                  <AlertTriangle className="w-4 h-4 text-amber-500" />
                                 )}
                               </div>
-                              <div className="w-full bg-gray-200 rounded-full h-2.5">
-                                <div 
-                                  className={`h-2.5 rounded-full ${
-                                    item.current_stock <= item.min_stock 
-                                      ? 'bg-red-500' 
-                                      : item.current_stock <= item.reorder_point 
-                                      ? 'bg-blue-500' 
-                                      : 'bg-emerald-500'
-                                  }`}
-                                  style={{ width: `${(item.current_stock / item.max_stock) * 100}%` }}
-                                ></div>
-                              </div>
-                              <div className="text-xs text-gray-600 font-medium">
-                                Min: {item.min_stock} | Reorder: {item.reorder_point}
+                              <div className="text-xs text-slate-500 font-medium">
+                                Max: {item.max_stock_level}
                               </div>
                             </div>
                           </TableCell>
                           <TableCell className="py-4">
-                            <Badge className={getStatusColor(item.status)}>
+                            <div className="font-bold text-slate-900 text-base">{item.available_quantity}</div>
+                            <div className="text-xs text-slate-500 font-medium">Available</div>
+                          </TableCell>
+                          <TableCell className="py-4">
+                            <div className="font-bold text-slate-900 text-base">{item.reserved_quantity}</div>
+                            <div className="text-xs text-slate-500 font-medium">Reserved</div>
+                          </TableCell>
+                          <TableCell className="py-4">
+                            <div className="text-sm text-slate-700 font-semibold">{item.location}</div>
+                            <div className="text-xs text-slate-500 font-medium">{item.warehouse}</div>
+                          </TableCell>
+                          <TableCell className="py-4">
+                            <div className="font-bold text-slate-900 text-base">{item.reorder_point}</div>
+                            <div className="text-xs text-slate-500 font-medium">Min: {item.min_stock_level}</div>
+                          </TableCell>
+                          <TableCell className="py-4">
+                            <Badge className={`${getStatusColor(item.status)} font-semibold px-2 py-1 rounded-full shadow-sm`}>
                               <div className="flex items-center space-x-1">
                                 {getStatusIcon(item.status)}
-                                <span>{item.status.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</span>
+                                <span className="text-xs">{item.status.split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</span>
                               </div>
                             </Badge>
                           </TableCell>
                           <TableCell className="py-4">
-                            <div className="flex items-center space-x-2">
-                              {getMovementIcon(item.movement_trend)}
-                              <span className="text-sm text-gray-700 capitalize font-medium">{item.movement_trend}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell className="py-4">
-                            <div>
-                              <div className="font-semibold text-gray-900">{item.total_value?.toLocaleString() || "0"} UGX</div>
-                              <div className="text-sm text-gray-600">
+                            <div className="space-y-1">
+                              <div className="font-bold text-slate-900 text-sm">{item.total_value?.toLocaleString() || "0"} UGX</div>
+                              <div className="text-xs text-slate-600 font-medium">
                                 {item.unit_cost?.toLocaleString() || "0"} UGX cost • {item.unit_price?.toLocaleString() || "0"} UGX retail
                               </div>
                             </div>
                           </TableCell>
                           <TableCell className="py-4">
-                            <div className="text-sm text-gray-700 font-medium">{item.supplier || "N/A"}</div>
-                          </TableCell>
-                          <TableCell className="py-4">
-                            <div className="text-sm text-gray-700">
-                              {item.last_restocked ? format(new Date(item.last_restocked), "MMM dd, yyyy") : "Never"}
+                            <div className="text-sm text-slate-700 font-semibold">
+                              {item.last_updated ? format(new Date(item.last_updated), "MMM dd, yyyy") : "Never"}
                             </div>
                           </TableCell>
                           <TableCell className="py-4">
                             <div className="flex items-center space-x-1">
-                              <Button variant="ghost" size="sm" className="text-gray-600 hover:bg-blue-50 hover:text-blue-700">
-                                <Eye className="w-4 h-4" />
-                              </Button>
-                              <Button variant="ghost" size="sm" className="text-gray-600 hover:bg-blue-50 hover:text-blue-700">
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className="text-slate-600 hover:bg-blue-50 hover:text-blue-700 rounded-lg shadow-sm hover:shadow-md transition-all duration-200"
+                                onClick={() => handleAdjustStock(item)}
+                                title="Adjust Stock"
+                              >
                                 <Edit className="w-4 h-4" />
                               </Button>
-                              <Button variant="ghost" size="sm" className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50">
-                                <Plus className="w-4 h-4" />
-                              </Button>
-                              <Button variant="ghost" size="sm" className="text-gray-600 hover:bg-gray-50">
-                                <MoreHorizontal className="w-4 h-4" />
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className="text-slate-600 hover:bg-green-50 hover:text-green-700 rounded-lg shadow-sm hover:shadow-md transition-all duration-200"
+                                onClick={() => handleViewHistory(item)}
+                                title="View History"
+                              >
+                                <Eye className="w-4 h-4" />
                               </Button>
                             </div>
                           </TableCell>
@@ -512,12 +562,15 @@ export default function InventoryPage() {
                   <p className="text-gray-600 mb-4">Try adjusting your search or filter criteria</p>
                   <Button variant="outline" onClick={() => setFilters({
                     search: "",
-                    status: undefined,
-                    movement_trend: undefined,
-                    sort_by: "product_name",
-                    sort_order: "asc",
+                    status: "all" as const,
+                    location: "",
+                    category_id: "",
+                    sort_by: "product_name" as const,
+                    sort_order: "asc" as const,
                     page: 1,
                     limit: 20,
+                    show_low_stock_only: false,
+                    show_out_of_stock_only: false,
                   })}>
                     Clear Filters
                   </Button>
@@ -526,63 +579,68 @@ export default function InventoryPage() {
             </CardContent>
           </Card>
 
-          {/* Quick Actions */}
-          <Card className="bg-white border-0 shadow-lg">
-            <CardHeader className="border-b border-gray-100 pb-4">
-              <CardTitle className="text-lg font-semibold text-gray-900">Quick Actions</CardTitle>
+          {/* Refined Quick Actions */}
+          <Card className="bg-white border border-slate-200/60 shadow-lg rounded-xl overflow-hidden">
+            <CardHeader className="bg-gradient-to-r from-slate-50 to-blue-50 border-b border-slate-200/60 p-6">
+              <CardTitle className="text-xl font-bold text-slate-900">Quick Actions</CardTitle>
+              <p className="text-slate-600 text-sm font-medium mt-1">Streamline your inventory management workflow</p>
             </CardHeader>
-            <CardContent className="p-4">
+            <CardContent className="p-6">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <Button variant="outline" className="justify-start h-auto p-4 bg-white hover:bg-red-50 hover:text-red-700 border-gray-300 min-h-[90px] w-full">
+                <Button variant="outline" className="justify-start h-auto p-4 bg-white hover:bg-gradient-to-br hover:from-red-50 hover:to-rose-50 hover:text-red-700 border-slate-300 min-h-[90px] w-full rounded-lg shadow-sm hover:shadow-md transition-all duration-300 group">
                   <div className="flex items-start space-x-3 w-full">
-                    <div className="p-2 bg-red-100 rounded-lg flex-shrink-0">
-                      <AlertTriangle className="w-5 h-5 text-red-600" />
+                    <div className="p-2 bg-gradient-to-br from-red-500 to-rose-500 rounded-lg flex-shrink-0 shadow-sm group-hover:shadow-md transition-all duration-300">
+                      <AlertTriangle className="w-4 h-4 text-white" />
                     </div>
                     <div className="text-left flex-1 overflow-hidden">
-                      <div className="font-semibold text-gray-900 text-sm leading-tight mb-1">Reorder Low Stock</div>
-                      <div className="text-xs text-gray-600 leading-relaxed break-words">
+                      <div className="font-bold text-slate-900 text-sm leading-tight mb-1">Reorder Low Stock</div>
+                      <div className="text-xs text-slate-600 leading-relaxed break-words font-medium">
                         {lowStockCount} items need attention
                       </div>
                     </div>
                   </div>
                 </Button>
                 
-                <Button variant="outline" className="justify-start h-auto p-4 bg-white hover:bg-blue-50 hover:text-blue-700 border-gray-300 min-h-[90px] w-full">
+                <Button variant="outline" className="justify-start h-auto p-4 bg-white hover:bg-gradient-to-br hover:from-blue-50 hover:to-indigo-50 hover:text-blue-700 border-slate-300 min-h-[90px] w-full rounded-lg shadow-sm hover:shadow-md transition-all duration-300 group">
                   <div className="flex items-start space-x-3 w-full">
-                    <div className="p-2 bg-blue-100 rounded-lg flex-shrink-0">
-                      <RefreshCw className="w-5 h-5 text-blue-600" />
+                    <div className="p-2 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-lg flex-shrink-0 shadow-sm group-hover:shadow-md transition-all duration-300">
+                      <RefreshCw className="w-4 h-4 text-white" />
                     </div>
                     <div className="text-left flex-1 overflow-hidden">
-                      <div className="font-semibold text-gray-900 text-sm leading-tight mb-1">Bulk Stock Update</div>
-                      <div className="text-xs text-gray-600 leading-relaxed break-words">
+                      <div className="font-bold text-slate-900 text-sm leading-tight mb-1">Bulk Stock Update</div>
+                      <div className="text-xs text-slate-600 leading-relaxed break-words font-medium">
                         Update multiple items at once
                       </div>
                     </div>
                   </div>
                 </Button>
                 
-                <Button variant="outline" className="justify-start h-auto p-4 bg-white hover:bg-emerald-50 hover:text-emerald-700 border-gray-300 min-h-[90px] w-full">
+                <Button variant="outline" className="justify-start h-auto p-4 bg-white hover:bg-gradient-to-br hover:from-emerald-50 hover:to-green-50 hover:text-emerald-700 border-slate-300 min-h-[90px] w-full rounded-lg shadow-sm hover:shadow-md transition-all duration-300 group">
                   <div className="flex items-start space-x-3 w-full">
-                    <div className="p-2 bg-emerald-100 rounded-lg flex-shrink-0">
-                      <Download className="w-5 h-5 text-emerald-600" />
+                    <div className="p-2 bg-gradient-to-br from-emerald-500 to-green-500 rounded-lg flex-shrink-0 shadow-sm group-hover:shadow-md transition-all duration-300">
+                      <Download className="w-4 h-4 text-white" />
                     </div>
                     <div className="text-left flex-1 overflow-hidden">
-                      <div className="font-semibold text-gray-900 text-sm leading-tight mb-1">Generate Report</div>
-                      <div className="text-xs text-gray-600 leading-relaxed break-words">
+                      <div className="font-bold text-slate-900 text-sm leading-tight mb-1">Generate Report</div>
+                      <div className="text-xs text-slate-600 leading-relaxed break-words font-medium">
                         Export inventory data
                       </div>
                     </div>
                   </div>
                 </Button>
 
-                <Button variant="outline" className="justify-start h-auto p-4 bg-white hover:bg-purple-50 hover:text-purple-700 border-gray-300 min-h-[90px] w-full">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setShowAlertSettings(true)}
+                  className="justify-start h-auto p-4 bg-white hover:bg-gradient-to-br hover:from-purple-50 hover:to-violet-50 hover:text-purple-700 border-slate-300 min-h-[90px] w-full rounded-lg shadow-sm hover:shadow-md transition-all duration-300 group"
+                >
                   <div className="flex items-start space-x-3 w-full">
-                    <div className="p-2 bg-purple-100 rounded-lg flex-shrink-0">
-                      <Settings className="w-5 h-5 text-purple-600" />
+                    <div className="p-2 bg-gradient-to-br from-purple-500 to-violet-500 rounded-lg flex-shrink-0 shadow-sm group-hover:shadow-md transition-all duration-300">
+                      <Settings className="w-4 h-4 text-white" />
                     </div>
                     <div className="text-left flex-1 overflow-hidden">
-                      <div className="font-semibold text-gray-900 text-sm leading-tight mb-1">Stock Settings</div>
-                      <div className="text-xs text-gray-600 leading-relaxed break-words">
+                      <div className="font-bold text-slate-900 text-sm leading-tight mb-1">Stock Settings</div>
+                      <div className="text-xs text-slate-600 leading-relaxed break-words font-medium">
                         Configure alerts & thresholds
                       </div>
                     </div>
@@ -592,12 +650,12 @@ export default function InventoryPage() {
             </CardContent>
           </Card>
 
-          {/* Pagination */}
+          {/* Refined Pagination */}
           {totalPages > 1 && (
-            <Card className="bg-white border-0 shadow-lg">
+            <Card className="bg-white border border-slate-200/60 shadow-lg rounded-xl overflow-hidden">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
-                  <div className="text-sm text-gray-600">
+                  <div className="text-sm text-slate-600 font-semibold">
                     Showing {((currentPage - 1) * (filters.limit || 20)) + 1} to {Math.min(currentPage * (filters.limit || 20), totalItems)} of {totalItems} items
                   </div>
                   <div className="flex items-center space-x-2">
@@ -606,11 +664,11 @@ export default function InventoryPage() {
                       size="sm"
                       onClick={() => handlePageChange(currentPage - 1)}
                       disabled={currentPage <= 1}
-                      className="bg-white border-gray-300"
+                      className="bg-white border-slate-300 text-slate-700 font-semibold shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
                     >
                       Previous
                     </Button>
-                    <span className="text-sm text-gray-600">
+                    <span className="text-sm text-slate-700 font-bold px-3 py-1 bg-slate-50 rounded-lg">
                       Page {currentPage} of {totalPages}
                     </span>
                     <Button
@@ -618,7 +676,7 @@ export default function InventoryPage() {
                       size="sm"
                       onClick={() => handlePageChange(currentPage + 1)}
                       disabled={currentPage >= totalPages}
-                      className="bg-white border-gray-300"
+                      className="bg-white border-slate-300 text-slate-700 font-semibold shadow-sm hover:shadow-md transition-all duration-200 rounded-lg"
                     >
                       Next
                     </Button>
@@ -629,6 +687,27 @@ export default function InventoryPage() {
           )}
         </div>
       </div>
+
+      {/* Stock Adjustment Modal */}
+      <StockAdjustmentModal
+        isOpen={showAdjustmentModal}
+        onClose={() => setShowAdjustmentModal(false)}
+        onSuccess={handleAdjustmentSuccess}
+        product={selectedProduct}
+      />
+
+      {/* Inventory History Modal */}
+      <InventoryHistoryModal
+        isOpen={showHistoryModal}
+        onClose={() => setShowHistoryModal(false)}
+        product={selectedProduct}
+      />
+
+      {/* Stock Alert Settings Modal */}
+      <StockAlertSettings
+        isOpen={showAlertSettings}
+        onClose={() => setShowAlertSettings(false)}
+      />
     </div>
   )
 }

@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     // Get basic stats from products table only (more reliable)
     const { data: products, error: productsError, count: productsCount } = await supabase
       .from('products')
-      .select('id, status, price, cost_price, stock_quantity, created_at', { count: 'exact' })
+      .select('id, status, price, cost_price, stock_quantity, min_stock_level, created_at', { count: 'exact' })
 
     if (productsError) {
       throw new Error(`Products fetch error: ${productsError.message}`)

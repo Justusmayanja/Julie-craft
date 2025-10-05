@@ -77,6 +77,7 @@ export async function GET(request: NextRequest) {
           category_id,
           category_name,
           price,
+          cost_price,
           stock_quantity,
           status,
           categories!inner(name, description)
@@ -101,11 +102,10 @@ export async function GET(request: NextRequest) {
         .order('price', { ascending: false })
         .limit(10),
 
-      // Low stock products
+      // Low stock products - we'll filter this in JavaScript instead
       supabase
         .from('products')
-        .select('id, name, stock_quantity, min_stock_level, price, status')
-        .lte('stock_quantity', supabase.from('products').select('min_stock_level')),
+        .select('id, name, stock_quantity, min_stock_level, price, status'),
 
       // Out of stock products
       supabase
@@ -127,8 +127,15 @@ export async function GET(request: NextRequest) {
     const stockData = stockAnalysis.data || []
     const recent = recentActivity.data || []
     const top = topProducts.data || []
-    const lowStock = lowStockProducts.data || []
+    const allProductsForStockCheck = lowStockProducts.data || []
     const outOfStock = outOfStockProducts.data || []
+    
+    // Filter low stock products in JavaScript
+    const lowStock = allProductsForStockCheck.filter(product => 
+      product.stock_quantity !== null && 
+      product.min_stock_level !== null && 
+      product.stock_quantity <= product.min_stock_level
+    )
 
     // Calculate comprehensive analytics
     const totalProducts = products.length

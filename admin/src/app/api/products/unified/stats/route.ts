@@ -19,12 +19,12 @@ export async function GET(request: NextRequest) {
       // Products table stats
       supabase
         .from('products')
-        .select('id, status, price, cost_price, stock_quantity, created_at', { count: 'exact' }),
+        .select('id, status, price, cost_price, stock_quantity, min_stock_level, created_at', { count: 'exact' }),
 
       // Inventory table stats
       supabase
         .from('inventory')
-        .select('id, product_id, current_stock, unit_cost, unit_price, total_value, status, movement_trend', { count: 'exact' })
+        .select('id, product_id, current_stock, min_stock, unit_cost, unit_price, total_value, status, movement_trend, updated_at', { count: 'exact' })
     ])
 
     if (productsStats.error) throw new Error(`Products stats error: ${productsStats.error.message}`)
@@ -88,10 +88,10 @@ export async function GET(request: NextRequest) {
 
     // Consistency metrics
     const consistencyMetrics = {
-      products_with_inventory: totalProducts - productsWithoutInventory,
-      products_without_inventory: productsWithoutInventory,
-      inventory_without_products: inventoryWithoutProducts,
-      consistency_percentage: totalProducts > 0 ? ((totalProducts - productsWithoutInventory) / totalProducts) * 100 : 0,
+      products_with_inventory: totalProducts - productsWithoutInventory.length,
+      products_without_inventory: productsWithoutInventory.length,
+      inventory_without_products: inventoryWithoutProducts.length,
+      consistency_percentage: totalProducts > 0 ? ((totalProducts - productsWithoutInventory.length) / totalProducts) * 100 : 0,
       stock_consistency: products.filter(p => {
         const inv = inventory.find(i => i.id === p.id)
         return inv ? inv.current_stock === p.stock_quantity : false
@@ -125,8 +125,8 @@ export async function GET(request: NextRequest) {
         total_products: totalProducts,
         total_inventory_items: totalInventoryItems,
         products_with_inventory: consistencyMetrics.products_with_inventory,
-        products_without_inventory: productsWithoutInventory,
-        inventory_without_products: inventoryWithoutProducts,
+        products_without_inventory: productsWithoutInventory.length,
+        inventory_without_products: inventoryWithoutProducts.length,
         consistency_percentage: Math.round(consistencyMetrics.consistency_percentage * 100) / 100,
       },
       status_breakdown: {
@@ -157,15 +157,15 @@ export async function GET(request: NextRequest) {
         total_activity: recentProducts + recentInventoryUpdates,
       },
       alerts: {
-        needs_sync: productsWithoutInventory > 0 || inventoryWithoutProducts > 0,
+        needs_sync: productsWithoutInventory.length > 0 || inventoryWithoutProducts.length > 0,
         low_stock_alert: lowStockProducts.length > 0,
         out_of_stock_alert: outOfStockProducts.length > 0,
         consistency_alert: consistencyMetrics.consistency_percentage < 90,
         high_discrepancy: Math.abs(totalInventoryValue - totalProductValue) > 10000,
       },
       recommendations: generateRecommendations({
-        productsWithoutInventory,
-        inventoryWithoutProducts,
+        productsWithoutInventory: productsWithoutInventory.length,
+        inventoryWithoutProducts: inventoryWithoutProducts.length,
         lowStockProducts: lowStockProducts.length,
         outOfStockProducts: outOfStockProducts.length,
         consistencyPercentage: consistencyMetrics.consistency_percentage,

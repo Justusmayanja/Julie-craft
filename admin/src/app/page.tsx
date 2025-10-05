@@ -383,7 +383,7 @@ export default function Dashboard() {
                   <div key={index} className="group relative overflow-hidden bg-gradient-to-br from-blue-50 via-emerald-50 to-green-50 rounded-lg p-4 border border-blue-200/50 hover:shadow-md transition-all duration-300">
                     <div className="absolute top-2 right-2">
                       <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-emerald-500 rounded-lg flex items-center justify-center text-white font-bold text-sm shadow-sm">
-                        #{product.rank || index + 1}
+#{index + 1}
                       </div>
                     </div>
                     <div className="space-y-3">
@@ -392,17 +392,32 @@ export default function Dashboard() {
                       </div>
                       <div className="space-y-1">
                         <div className="flex items-center justify-between text-sm">
-                          <span className="text-gray-600">Price</span>
-                          <span className="font-medium text-gray-900">{product.price?.toLocaleString()} UGX</span>
+                          <span className="text-gray-600">Sales</span>
+                          <span className="font-medium text-gray-900">
+                            {'sales' in product ? (product.sales?.toLocaleString() || 0) : (product.estimated_sales?.toLocaleString() || 0)}
+                          </span>
                         </div>
                         <div className="flex items-center justify-between text-sm">
-                          <span className="text-gray-600">Stock</span>
-                          <span className="font-medium text-gray-900">{product.stock || product.sales || 0}</span>
+                          <span className="text-gray-600">Revenue</span>
+                          <span className="font-semibold text-green-600">
+                            {'revenue' in product ? 
+                              `${(product.revenue / 1000000).toFixed(1)}M UGX` : 
+                              `${(product.estimated_revenue / 1000000).toFixed(1)}M UGX`
+                            }
+                          </span>
                         </div>
-                        {product.estimated_revenue && (
+                        {'growth' in product && product.growth && (
                           <div className="flex items-center justify-between text-sm">
-                            <span className="text-gray-600">Est. Revenue</span>
-                            <span className="font-semibold text-green-600">{(product.estimated_revenue / 1000000).toFixed(1)}M UGX</span>
+                            <span className="text-gray-600">Growth</span>
+                            <span className={`font-medium ${product.growth >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              {product.growth >= 0 ? '+' : ''}{product.growth.toFixed(1)}%
+                            </span>
+                          </div>
+                        )}
+                        {'price' in product && (
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-gray-600">Price</span>
+                            <span className="font-medium text-gray-900">{product.price?.toLocaleString()} UGX</span>
                           </div>
                         )}
                       </div>

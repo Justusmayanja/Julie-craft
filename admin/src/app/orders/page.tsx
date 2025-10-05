@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -27,9 +27,15 @@ import {
   Banknote,
   Calendar,
   User,
-  Loader2
+  Loader2,
+  Settings,
+  Database,
+  BarChart3,
+  RefreshCw
 } from "lucide-react"
 import { useOrders } from "@/hooks/use-orders"
+import { EnhancedOrderManagement } from "@/components/orders/enhanced-order-management"
+import { useToast } from "@/hooks/use-toast"
 
 const statusOptions = ["All", "pending", "processing", "shipped", "delivered", "cancelled"]
 
@@ -56,8 +62,12 @@ const getStatusIcon = (status: string) => {
 }
 
 export default function OrdersPage() {
+  const { addToast } = useToast()
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedStatus, setSelectedStatus] = useState("All")
+  const [showEnhancedOrders, setShowEnhancedOrders] = useState(false)
+  const [isSettingUpEnhanced, setIsSettingUpEnhanced] = useState(false)
+  const [enhancedSetupComplete, setEnhancedSetupComplete] = useState(false)
 
   const { data: ordersData, loading, error, refresh } = useOrders({
     search: searchTerm || undefined,
@@ -65,6 +75,60 @@ export default function OrdersPage() {
     autoRefresh: true,
     refreshInterval: 300000 // 5 minutes
   })
+
+  // Check if enhanced orders are available
+  useEffect(() => {
+    const checkEnhancedOrders = async () => {
+      try {
+        const response = await fetch('/api/orders/enhanced?limit=1')
+        if (response.ok) {
+          setEnhancedSetupComplete(true)
+        }
+      } catch (error) {
+        // Enhanced orders not available
+      }
+    }
+    checkEnhancedOrders()
+  }, [])
+
+  // Setup enhanced orders
+  const handleSetupEnhancedOrders = async () => {
+    setIsSettingUpEnhanced(true)
+    try {
+      const response = await fetch('/api/admin/setup-enhanced-orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        addToast({
+          title: 'Enhanced Orders Setup Complete',
+          description: result.message || 'Enhanced order management system is now ready!',
+          type: 'success',
+        })
+        setEnhancedSetupComplete(true)
+        setShowEnhancedOrders(true)
+      } else {
+        addToast({
+          title: 'Setup Failed',
+          description: result.error || 'Failed to setup enhanced order management',
+          type: 'error',
+        })
+      }
+    } catch (error) {
+      addToast({
+        title: 'Setup Error',
+        description: 'Failed to setup enhanced order management',
+        type: 'error',
+      })
+    } finally {
+      setIsSettingUpEnhanced(false)
+    }
+  }
 
   if (loading && !ordersData) {
     return (
@@ -107,6 +171,11 @@ export default function OrdersPage() {
 
   const { orders, stats } = ordersData
 
+  // Show enhanced order management if available and enabled
+  if (showEnhancedOrders && enhancedSetupComplete) {
+    return <EnhancedOrderManagement />
+  }
+
   return (
     <div className="h-full">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -118,6 +187,33 @@ export default function OrdersPage() {
               <p className="text-gray-600 mt-1 text-base">Manage customer orders and track fulfillment</p>
             </div>
             <div className="flex gap-3">
+              {enhancedSetupComplete && (
+                <Button 
+                  onClick={() => setShowEnhancedOrders(true)}
+                  variant="outline"
+                  size="sm"
+                  className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200 text-blue-700 hover:from-blue-100 hover:to-indigo-100"
+                >
+                  <BarChart3 className="w-4 h-4 mr-2" />
+                  Enhanced Orders
+                </Button>
+              )}
+              {!enhancedSetupComplete && (
+                <Button 
+                  onClick={handleSetupEnhancedOrders}
+                  disabled={isSettingUpEnhanced}
+                  variant="outline"
+                  size="sm"
+                  className="bg-gradient-to-r from-green-50 to-emerald-50 border-green-200 text-green-700 hover:from-green-100 hover:to-emerald-100"
+                >
+                  {isSettingUpEnhanced ? (
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Database className="w-4 h-4 mr-2" />
+                  )}
+                  {isSettingUpEnhanced ? 'Setting Up...' : 'Setup Enhanced Orders'}
+                </Button>
+              )}
               <Button 
                 variant="outline" 
                 size="sm" 
@@ -125,7 +221,7 @@ export default function OrdersPage() {
                 onClick={refresh}
                 disabled={loading}
               >
-                <Download className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
                 Refresh
               </Button>
               <Button variant="outline" size="sm" className="bg-white hover:bg-gray-50 border-gray-300">
@@ -134,6 +230,60 @@ export default function OrdersPage() {
               </Button>
             </div>
           </div>
+
+          {/* Enhanced Orders Setup Info */}
+          {!enhancedSetupComplete && (
+            <Card className="border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+              <CardContent className="p-6">
+                <div className="flex items-start gap-4">
+                  <div className="flex-shrink-0">
+                    <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                      <Settings className="w-6 h-6 text-blue-600" />
+                    </div>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold text-blue-900 mb-2">
+                      Upgrade to Enhanced Order Management
+                    </h3>
+                    <p className="text-blue-700 mb-4">
+                      Get advanced features like inventory integration, order workflows, status tracking, 
+                      task management, and comprehensive analytics for your handmade business.
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle className="w-4 h-4 text-green-600" />
+                        <span className="text-sm text-blue-700">Inventory Integration</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <CheckCircle className="w-4 h-4 text-green-600" />
+                        <span className="text-sm text-blue-700">Order Workflows</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <CheckCircle className="w-4 h-4 text-green-600" />
+                        <span className="text-sm text-blue-700">Task Management</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <CheckCircle className="w-4 h-4 text-green-600" />
+                        <span className="text-sm text-blue-700">Status History</span>
+                      </div>
+                    </div>
+                    <Button 
+                      onClick={handleSetupEnhancedOrders}
+                      disabled={isSettingUpEnhanced}
+                      className="bg-blue-600 hover:bg-blue-700"
+                    >
+                      {isSettingUpEnhanced ? (
+                        <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <Database className="w-4 h-4 mr-2" />
+                      )}
+                      {isSettingUpEnhanced ? 'Setting Up Enhanced System...' : 'Setup Enhanced Order Management'}
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Stats Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

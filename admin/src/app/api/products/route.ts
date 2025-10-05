@@ -112,10 +112,16 @@ export async function POST(request: NextRequest) {
     // Validate input
     const validatedData = createProductSchema.parse(body)
 
+    // Ensure physical_stock is set from stock_quantity if not provided
+    const productData = {
+      ...validatedData,
+      physical_stock: validatedData.physical_stock ?? validatedData.stock_quantity
+    }
+
     // Create product
     const { data, error } = await supabase
       .from('products')
-      .insert(validatedData)
+      .insert(productData)
       .select(`
         *,
         category:categories(*)

@@ -21,6 +21,13 @@ export const createProductSchema = z.object({
   tags: z.array(z.string().max(50)).optional().nullable(),
   seo_title: z.string().max(60).optional().nullable(),
   seo_description: z.string().max(160).optional().nullable(),
+  // Robust inventory fields
+  physical_stock: z.number().int().min(0, 'Physical stock cannot be negative').optional(),
+  reserved_stock: z.number().int().min(0, 'Reserved stock cannot be negative').default(0),
+  reorder_point: z.number().int().min(0, 'Reorder point cannot be negative').default(5),
+  reorder_quantity: z.number().int().positive('Reorder quantity must be positive').default(10),
+  max_stock_level: z.number().int().positive('Max stock level must be positive').default(1000),
+  min_stock_level: z.number().int().min(0, 'Min stock level cannot be negative').default(5),
 })
 
 export const updateProductSchema = createProductSchema.partial().extend({
